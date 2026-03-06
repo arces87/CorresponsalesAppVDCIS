@@ -160,8 +160,8 @@ export default function ObligacionesScreen() {
         true);
     } catch (error) {
       console.error('Error al buscar cliente:', error);
-      setError(error.message || 'Error al buscar el cliente');
-      mostrarError('Error', error.message || 'No se pudo encontrar el cliente');
+      setError(error.message || 'Error al buscar el socio');
+      mostrarError('Error', error.message || 'No se pudo encontrar el socio');
     } finally {
       setLoading(false);
     }
@@ -195,7 +195,7 @@ export default function ObligacionesScreen() {
         secuencial: item.secuencial,
         tipo: item.rubroPorCobrar || 'Sin tipo',
         codigo: String(item.secuencialTipoRubroPorCobrar || item.secuencial),
-        saldo: (item.valorPorCobrar - item.valorCobrado) || 0
+        saldo: (item.valorPorCobrar) || 0
       }));
 
       setObligaciones(obligacionesMapeadas);
@@ -206,7 +206,7 @@ export default function ObligacionesScreen() {
       }
     } catch (error) {
       console.error('Error al buscar obligaciones:', error);
-      setError('No se pudieron cargar las obligaciones del cliente');
+      setError('No se pudieron cargar las obligaciones del socio');
     } finally {
       setCargandoObligaciones(false);
     }
@@ -257,7 +257,7 @@ export default function ObligacionesScreen() {
         </View>
         <ScrollView 
           style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(20, insets.bottom + 16) }]}
           showsVerticalScrollIndicator={true}
           keyboardShouldPersistTaps="handled"
         >
@@ -299,7 +299,7 @@ export default function ObligacionesScreen() {
             {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.buttonText}>BUSCAR CLIENTE</Text>
+              <Text style={styles.buttonText}>BUSCAR SOCIO</Text>
             )}
           </TouchableOpacity>
 
@@ -309,7 +309,7 @@ export default function ObligacionesScreen() {
 
           {cliente && (
             <View style={styles.resultContainer}>
-              <Text style={styles.resultTitle}>Datos del Cliente</Text>
+              <Text style={styles.resultTitle}>Datos del Socio</Text>
               <View style={styles.resultRow}>
                 <Text style={styles.resultLabel}>Nombres:</Text>
                 <Text style={styles.resultValue}>{cliente.nombres || 'No disponible'}</Text>
@@ -445,7 +445,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     alignItems: 'center',
-    paddingBottom: 20,
+    flexGrow: 1,
   },
   headerWrapper: {
     width: '92%',
@@ -700,10 +700,12 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     marginBottom: 15,
     overflow: 'hidden',
+    backgroundColor: '#fff',
   },
   picker: {
     height: 40,
     width: '100%',
+    color: '#2B4F8C',
   },
   tableContainer: {
     borderWidth: 1,

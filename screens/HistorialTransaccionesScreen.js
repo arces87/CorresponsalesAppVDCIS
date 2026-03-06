@@ -127,7 +127,7 @@ export default function HistorialTransaccionesScreen() {
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <ScrollView 
             style={styles.scrollView}
-            contentContainerStyle={styles.scrollViewContent}
+            contentContainerStyle={[styles.scrollViewContent, { paddingBottom: Math.max(20, insets.bottom + 16) }]}
             keyboardShouldPersistTaps="handled"
             refreshControl={
               <RefreshControl
@@ -275,7 +275,7 @@ export default function HistorialTransaccionesScreen() {
                         'Fecha no disponible'}
                     </Text>
                     <Text style={styles.transaccionCliente}>
-                      {transaccion.nombreCliente || 'Cliente no especificado'}
+                      {transaccion.nombreCliente || 'Socio no especificado'}
                     </Text>
                     <Text style={styles.transaccionCuenta}>
                       {transaccion.identificacionCliente || 'N/A'}
@@ -317,7 +317,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
   },
   scrollViewContent: {
-    paddingBottom: 20,
+    flexGrow: 1,
   },
   formContainer: {
     backgroundColor: 'rgba(255, 255, 255, 0.9)',

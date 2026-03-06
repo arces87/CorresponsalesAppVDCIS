@@ -36,6 +36,12 @@ const AlertasTabScreen = () => {
             <View style={styles.headerTitleContainer}>
               <Text style={styles.headerTitle}>ALERTAS</Text>
             </View>
+            <TouchableOpacity
+              style={styles.menuButton}
+              onPress={() => router.push('/menu')}
+            >
+              <Text style={styles.menuIcon}>☰</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -86,6 +92,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: -20, // Compensar el ancho del botón de retroceso
+    marginRight: -20, // Compensar el ancho del botón de menú
+  },
+  menuButton: {
+    zIndex: 1,
+    padding: 10,
+    minWidth: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuIcon: {
+    color: '#fff',
+    fontSize: 24,
+    fontWeight: 'bold',
   },
   backButton: {
     zIndex: 1,

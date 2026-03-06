@@ -3,7 +3,7 @@ import { Picker } from '@react-native-picker/picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useContext, useEffect, useState } from 'react';
-import { ActivityIndicator, Dimensions, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Dimensions, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import CustomModal from '../components/CustomModal';
 import { AuthContext } from '../context/AuthContext';
@@ -27,30 +27,41 @@ export default function DatosTransaccionPrestamoScreen() {
   const [menuLabel, setMenuLabel] = useState('');
   const [menuAccion, setMenuAccion] = useState('');
   const [valorMaximo, setValorMaximo] = useState(0);
+  const [modalAdelantoVisible, setModalAdelantoVisible] = useState(false);
+  const [listaCuotasAdelanto, setListaCuotasAdelanto] = useState([]);
+  const [cuotasSeleccionadasAdelanto, setCuotasSeleccionadasAdelanto] = useState([]);
+  const [cargandoCuotasAdelanto, setCargandoCuotasAdelanto] = useState(false);
+  const [valorDesdeAdelanto, setValorDesdeAdelanto] = useState(false);
 
-  const handleContinuar = async () => {
-    if (!valorTransaccion) {
-      mostrarAdvertencia('Campo requerido', 'Por favor ingrese un valor para la transacción');
-      return;
+  const handleContinuar = async (montoAdelanto) => {
+    const monto = montoAdelanto != null ? Number(montoAdelanto) : parseFloat(valorTransaccion);
+    if (montoAdelanto == null) {
+      if (!valorTransaccion) {
+        mostrarAdvertencia('Campo requerido', 'Por favor ingrese un valor para la transacción');
+        return;
+      }
+      if (isNaN(monto) || monto <= 0) {
+        mostrarAdvertencia('Valor inválido', 'El valor debe ser mayor a cero');
+        return;
+      }
+      if (!valorDesdeAdelanto && monto > valorMaximo) {
+        mostrarAdvertencia('Valor excedido', `El valor no puede ser mayor a S/ ${valorMaximo.toFixed(2)}`);
+        return;
+      }
+    } else {
+      if (monto <= 0) {
+        mostrarAdvertencia('Selección requerida', 'Seleccione al menos una cuota');
+        return;
+      }
     }
 
-    const valorNumerico = parseFloat(valorTransaccion);
-    if (isNaN(valorNumerico) || valorNumerico <= 0) {
-      mostrarAdvertencia('Valor inválido', 'El valor debe ser mayor a cero');
-      return;
-    }
-
-    if (valorNumerico > valorMaximo) {
-      mostrarAdvertencia('Valor excedido', `El valor no puede ser mayor a S/ ${valorMaximo.toFixed(2)}`);
-      return;
-    }
-
+    const valorStr = monto.toFixed(2);
     try {
       const prestamotransaccion = prestamos.find(c => String(c.secuencial) === prestamoSeleccionado);
       const transaccionData = {
         secuencialprestamo: prestamotransaccion.secuencial,
         codigoprestamo: prestamotransaccion.codigo,
-        valor: valorTransaccion,
+        valor: valorStr,
         nombrecliente: cliente.nombres + ' ' + cliente.apellidos,
         identificacioncliente: cliente.identificacion
       };
@@ -66,7 +77,7 @@ export default function DatosTransaccionPrestamoScreen() {
         usuario: userData?.usuario        
       });
       console.log('Saldo actual:', saldo);
-      if (saldo < Number(valorTransaccion)) {
+      if (saldo < monto) {
         mostrarAdvertencia('Fondos insuficientes', 'El corresponsal no cuenta con suficiente fondos en su cuenta para realizar la transacción.');
         setLoading(false);
         return;
@@ -74,14 +85,15 @@ export default function DatosTransaccionPrestamoScreen() {
       const comision = Number(userData?.comisiones?.abonoPrestamos?.administracionCanal) +
         Number(userData?.comisiones?.abonoPrestamos?.agente) +
         Number(userData?.comisiones?.abonoPrestamos?.cooperativa);
+      const accionParaOtp = valorDesdeAdelanto ? 'adelantacuota' : menuAccion;
       router.push({
         pathname: '/otpverificacion',
         params: {
-          monto: valorTransaccion,
+          monto: valorStr,
           comision: comision,
-          total: Number(valorTransaccion) + Number(comision),
+          total: monto + Number(comision),
           labelTransaccion: menuLabel,
-          accionTransaccion: menuAccion,
+          accionTransaccion: accionParaOtp,
           otpCliente: userData?.jsonNegocio?.abonoPrestamos?.validarOtpCliente ?? false,
           otpAgente: userData?.jsonNegocio?.abonoPrestamos?.validarOtpAgente ?? false
         }
@@ -93,6 +105,82 @@ export default function DatosTransaccionPrestamoScreen() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const formatFechaVencimiento = (fechaStr) => {
+    if (!fechaStr) return '—';
+    try {
+      const d = new Date(fechaStr);
+      if (isNaN(d.getTime())) return fechaStr;
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      return `${day}/${month}/${year}`;
+    } catch {
+      return fechaStr;
+    }
+  };
+
+  const handleAdelantaCuota = async () => {
+    const prestamoObj = prestamos.find(p => String(p.secuencial) === prestamoSeleccionado);
+    if (!prestamoObj) return;
+    const secuencialPrestamo = prestamoObj.secuencial;
+    setCargandoCuotasAdelanto(true);
+    setModalAdelantoVisible(true);
+    setListaCuotasAdelanto([]);
+    setCuotasSeleccionadasAdelanto([]);
+    try {
+      const res = await ApiService.informacionCuotas({
+        secuencialPrestamo,
+        usuario: userData?.usuario
+      });
+      const lista = res?.listCuotasValorAdelanto ?? res?.listaCuotasValorAdelanto;
+      const items = Array.isArray(lista) ? lista : [];
+      setListaCuotasAdelanto(items);
+    } catch (err) {
+      console.error('Error informacionCuotas:', err);
+      mostrarError('Error', err.message || 'No se pudo cargar la información de cuotas');
+      setModalAdelantoVisible(false);
+    } finally {
+      setCargandoCuotasAdelanto(false);
+    }
+  };
+
+  const toggleCuotaAdelanto = (numeroCuota) => {
+    const primerNumeroCuota = listaCuotasAdelanto.length > 0
+      ? Math.min(...listaCuotasAdelanto.map(c => c.numeroCuota))
+      : null;
+    setCuotasSeleccionadasAdelanto(prev => {
+      const isSelected = prev.includes(numeroCuota);
+      if (isSelected) {
+        if (prev.length <= 1) return [];
+        const min = Math.min(...prev);
+        const max = Math.max(...prev);
+        // Solo permitir quitar el último (max); si tocan el primero, limpiar toda la selección
+        if (numeroCuota === min) return [];
+        if (numeroCuota === max) return prev.filter(n => n !== max);
+        return prev;
+      }
+      // Agregar: solo puede iniciar por la primera cuota; luego solo extender hacia adelante (max+1)
+      if (prev.length === 0) {
+        return numeroCuota === primerNumeroCuota ? [numeroCuota] : prev;
+      }
+      const max = Math.max(...prev);
+      if (numeroCuota === max + 1) return [...prev, numeroCuota].sort((a, b) => a - b);
+      return prev;
+    });
+  };
+
+  const totalAdelanto = listaCuotasAdelanto
+    .filter(c => cuotasSeleccionadasAdelanto.includes(c.numeroCuota))
+    .reduce((sum, c) => sum + (Number(c.valor) || 0), 0);
+
+  const cerrarModalAdelanto = () => {
+    if (cuotasSeleccionadasAdelanto.length > 0) {
+      setValorTransaccion(totalAdelanto.toFixed(2));
+      setValorDesdeAdelanto(true);
+    }
+    setModalAdelantoVisible(false);
   };
 
   const [error, setError] = useState('');
@@ -128,17 +216,19 @@ export default function DatosTransaccionPrestamoScreen() {
     }
   }, [catalogos]);
 
-  // Establecer valorParaEstarAlDia cuando se selecciona un préstamo
+  // Establecer valor límite y valor inicial (valorCancelarHastaCuotaCurso) cuando se selecciona un préstamo
   useEffect(() => {
+    setValorDesdeAdelanto(false);
     if (prestamoSeleccionado && prestamos.length > 0) {
       const prestamoSeleccionadoObj = prestamos.find(p => String(p.secuencial) === prestamoSeleccionado);
-      if (prestamoSeleccionadoObj && prestamoSeleccionadoObj.valorParaEstarAlDia) {
-        const valorInicial = prestamoSeleccionadoObj.valorParaEstarAlDia.toFixed(2);
-        setValorTransaccion(valorInicial);
-        setValorMaximo(prestamoSeleccionadoObj.valorParaEstarAlDia);
+      if (prestamoSeleccionadoObj) {
+        const limite = prestamoSeleccionadoObj.valorCancelarHastaCuotaCurso ?? 0;
+        setValorMaximo(limite);
+        if (prestamoSeleccionadoObj.valorCancelarHastaCuotaCurso != null) {
+          setValorTransaccion(Number(prestamoSeleccionadoObj.valorCancelarHastaCuotaCurso).toFixed(2));
+        }
       }
     } else {
-      // Si no hay préstamo seleccionado, limpiar el valor
       setValorTransaccion('');
       setValorMaximo(0);
     }
@@ -175,8 +265,8 @@ export default function DatosTransaccionPrestamoScreen() {
         true);
     } catch (error) {
       console.error('Error al buscar cliente:', error);
-      setError(error.message || 'Error al buscar el cliente');
-      mostrarError('Error', error.message || 'No se pudo encontrar el cliente');
+      setError(error.message || 'Error al buscar el socio');
+      mostrarError('Error', error.message || 'No se pudo encontrar el socio');
     } finally {
       setLoading(false);
     }
@@ -208,7 +298,7 @@ export default function DatosTransaccionPrestamoScreen() {
       }
     } catch (error) {
       console.error('Error al buscar prestamos:', error);
-      setError('No se pudieron cargar los prestamos del cliente');
+      setError('No se pudieron cargar los prestamos del socio');
     } finally {
       setCargandoPrestamos(false);
     }
@@ -259,7 +349,7 @@ export default function DatosTransaccionPrestamoScreen() {
         </View>
         <ScrollView 
           style={styles.scrollView}
-          contentContainerStyle={styles.scrollViewContent}
+          contentContainerStyle={[styles.scrollViewContent, { paddingBottom: Math.max(20, insets.bottom + 16) }]}
           showsVerticalScrollIndicator={true}
         >
         <View style={globalStyles.card}>
@@ -300,7 +390,7 @@ export default function DatosTransaccionPrestamoScreen() {
             {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.buttonText}>BUSCAR CLIENTE</Text>
+              <Text style={styles.buttonText}>BUSCAR SOCIO</Text>
             )}
           </TouchableOpacity>
 
@@ -310,7 +400,7 @@ export default function DatosTransaccionPrestamoScreen() {
 
           {cliente && (
             <View style={styles.resultContainer}>
-              <Text style={styles.resultTitle}>Datos del Cliente</Text>
+              <Text style={styles.resultTitle}>Datos del Socio</Text>
               <View style={styles.resultRow}>
                 <Text style={styles.resultLabel}>Nombres:</Text>
                 <Text style={styles.resultValue}>{cliente.nombres || 'No disponible'}</Text>
@@ -332,44 +422,70 @@ export default function DatosTransaccionPrestamoScreen() {
                 </View>
               )}
 
-              {/* Selector de Prestamos */}
+              {/* Lista de Préstamos */}
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>SELECCIONAR PRESTAMO</Text>
+                <Text style={styles.sectionTitle}>SELECCIONAR PRÉSTAMO</Text>
                 {cargandoPrestamos ? (
                   <ActivityIndicator size="small" color="#2957a4" style={styles.loadingIndicator} />
                 ) : prestamos.length > 0 ? (
-                  <View style={styles.pickerContainer}>
-                    <Picker
-                      selectedValue={prestamoSeleccionado}
-                      onValueChange={(itemValue) => setPrestamoSeleccionado(itemValue)}
-                      style={styles.picker}
-                      dropdownIconColor="#2957a4"
-                    >
-                      {prestamos.map((prestamo) => (
-                        <Picker.Item
+                  <View style={styles.loansListContainer}>
+                    {prestamos.map((prestamo) => {
+                      const isSelected = String(prestamo.secuencial) === prestamoSeleccionado;
+                      return (
+                        <TouchableOpacity
                           key={prestamo.secuencial}
-                          label={`${prestamo.tipo} - (${prestamo.codigo})`}
-                          value={String(prestamo.secuencial)}
-                        />
-                      ))}
-                    </Picker>
+                          style={[styles.loanListItem, isSelected && styles.loanListItemSelected]}
+                          onPress={() => setPrestamoSeleccionado(String(prestamo.secuencial))}
+                          activeOpacity={0.7}
+                        >
+                          <View style={styles.loanListItemHeader}>
+                            <Text style={[styles.loanListCode, isSelected && styles.loanListItemSelectedText]}>
+                              {prestamo.codigo || '—'}
+                            </Text>
+                            <Text style={[styles.loanListBadge, isSelected && styles.loanListItemSelectedText]}>
+                              {prestamo.tipo || ''}
+                            </Text>
+                          </View>
+                          <View style={styles.loanListItemRow}>
+                            <Text style={styles.loanListLabel}>Valor para estar al día: </Text>
+                            <Text style={[styles.loanListValue, isSelected && styles.loanListItemSelectedText]}>
+                              S/{prestamo.valorParaEstarAlDia != null
+                                ? Number(prestamo.valorParaEstarAlDia).toFixed(2)
+                                : '0.00'}
+                            </Text>
+                          </View>
+                          <View style={styles.loanListItemRow}>
+                            <Text style={styles.loanListLabel}>Cuota a cancelar: </Text>
+                            <Text style={[styles.loanListValue, isSelected && styles.loanListItemSelectedText]}>
+                              S/{prestamo.valorCancelarHastaCuotaCurso != null
+                                ? Number(prestamo.valorCancelarHastaCuotaCurso).toFixed(2)
+                                : '0.00'}
+                            </Text>
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
                   </View>
                 ) : (
-                  <Text style={styles.noAccountsText}>No se encontraron prestamos</Text>
+                  <Text style={styles.noAccountsText}>No se encontraron préstamos</Text>
                 )}
 
-                {prestamoSeleccionado && prestamos.length > 0 && (
+                {prestamoSeleccionado && prestamos.length > 0 && (() => {
+                  const prestamoObj = prestamos.find(p => String(p.secuencial) === prestamoSeleccionado);
+                  const esValorLimiteCero = prestamoObj ? (Number(prestamoObj.valorCancelarHastaCuotaCurso) === 0) : false;
+                  return (
                   <View style={styles.accountDetails}>
-                    <Text style={styles.accountDetailText}>
-                      Saldo capital: S/{prestamos.find(c => String(c.secuencial) === prestamoSeleccionado)?.saldo?.toFixed(2) || '0.00'}                      
-                    </Text>
-                    <Text style={styles.accountDetailText}>                      
-                      Cuota a cancelar: S/ {prestamos.find(c => String(c.secuencial) === prestamoSeleccionado)?.valorParaEstarAlDia?.toFixed(2) || '0.00'}
-                    </Text>
-
                     <View style={styles.inputContainer}>
+                      {esValorLimiteCero && (
+                        <TouchableOpacity
+                          style={[styles.continueButton, styles.continueButtonAdelanto]}
+                          onPress={() => handleAdelantaCuota()}
+                        >
+                          <Text style={styles.continueButtonText}>ADELANTA CUOTA</Text>
+                        </TouchableOpacity>
+                      )}
                       <Text style={styles.label}>Valor de la transacción</Text>
-                      <View style={styles.currencyInputContainer}>
+                      <View style={[styles.currencyInputContainer, esValorLimiteCero && styles.inputDisabled]}>
                         <Text style={styles.currencySymbol}>S/</Text>
                         <TextInput
                           style={styles.currencyInput}
@@ -377,7 +493,10 @@ export default function DatosTransaccionPrestamoScreen() {
                           placeholder="0.00"
                           placeholderTextColor="#999"
                           value={valorTransaccion}
+                          editable={!esValorLimiteCero}
                           onChangeText={(text) => {
+                            if (esValorLimiteCero) return;
+                            setValorDesdeAdelanto(false);
                             // Allow only numbers and one decimal point
                             const regex = /^\d*\.?\d{0,2}$/;
                             if (regex.test(text)) {
@@ -416,13 +535,94 @@ export default function DatosTransaccionPrestamoScreen() {
                       </TouchableOpacity>
                     </View>
                   </View>
-                )}
+                  );
+                })()}
               </View>
             </View>
           )}
         </View>
         </ScrollView>
       </LinearGradient>
+
+      <Modal
+        visible={modalAdelantoVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={cerrarModalAdelanto}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalAdelantoContent}>
+            <View style={styles.modalAdelantoHeader}>
+              <Text style={styles.modalAdelantoTitle}>Seleccionar cuotas a adelantar</Text>
+              <TouchableOpacity
+                style={styles.modalAdelantoClose}
+                onPress={cerrarModalAdelanto}
+              >
+                <Text style={styles.modalAdelantoCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            {cargandoCuotasAdelanto ? (
+              <View style={styles.modalAdelantoBody}>
+                <ActivityIndicator size="large" color="#2B4F8C" />
+                <Text style={styles.modalAdelantoLoadingText}>Cargando cuotas...</Text>
+              </View>
+            ) : listaCuotasAdelanto.length === 0 ? (
+              <View style={styles.modalAdelantoBody}>
+                <Text style={styles.noAccountsText}>No hay cuotas disponibles</Text>
+              </View>
+            ) : (
+              <>
+                <ScrollView
+                  style={styles.modalAdelantoScroll}
+                  contentContainerStyle={styles.modalAdelantoScrollContent}
+                  showsVerticalScrollIndicator
+                >
+                  <View style={styles.tableContainer}>
+                    <View style={styles.tableHeader}>
+                      <Text style={[styles.tableHeaderText, styles.tableColumnInfo]}>Información</Text>
+                      <Text style={[styles.tableHeaderText, styles.tableColumnSelect]}>Selección</Text>
+                    </View>
+                    {listaCuotasAdelanto.map((cuota) => {
+                      const isSelected = cuotasSeleccionadasAdelanto.includes(cuota.numeroCuota);
+                      return (
+                        <TouchableOpacity
+                          key={cuota.numeroCuota}
+                          style={[styles.tableRow, isSelected && styles.tableRowSelected]}
+                          onPress={() => toggleCuotaAdelanto(cuota.numeroCuota)}
+                          activeOpacity={0.7}
+                        >
+                          <View style={styles.tableColumnInfo}>
+                            <Text style={styles.tableCellText}>Cuota {cuota.numeroCuota}</Text>
+                            <Text style={styles.tableCellText}>
+                              <Text style={styles.tableCellLabel}>Valor: </Text>
+                              S/{Number(cuota.valor).toFixed(2)}
+                            </Text>
+                            <Text style={styles.tableCellText}>
+                              <Text style={styles.tableCellLabel}>Vence: </Text>
+                              {formatFechaVencimiento(cuota.fechaVencimiento)}
+                            </Text>
+                          </View>
+                          <View style={styles.tableColumnSelect}>
+                            <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+                              {isSelected && <Text style={styles.checkboxMark}>✓</Text>}
+                            </View>
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </ScrollView>
+                <View style={styles.modalAdelantoFooter}>
+                  <Text style={styles.totalText}>
+                    Total: S/{totalAdelanto.toFixed(2)}
+                  </Text>
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+
       <CustomModal
         visible={modalVisible}
         title={modalData.title}
@@ -571,6 +771,138 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     padding: 10,
   },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalAdelantoContent: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    width: '100%',
+    maxWidth: 500,
+    maxHeight: '85%',
+    overflow: 'hidden',
+  },
+  modalAdelantoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    borderBottomWidth: 1,
+    borderBottomColor: '#dee2e6',
+    backgroundColor: '#f8f9fa',
+  },
+  modalAdelantoTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#2B4F8C',
+    flex: 1,
+  },
+  modalAdelantoClose: {
+    padding: 4,
+  },
+  modalAdelantoCloseText: {
+    fontSize: 22,
+    color: '#6c757d',
+    fontWeight: 'bold',
+  },
+  modalAdelantoBody: {
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 120,
+  },
+  modalAdelantoLoadingText: {
+    marginTop: 10,
+    fontSize: 14,
+    color: '#6c757d',
+  },
+  modalAdelantoScroll: {
+    maxHeight: 340,
+  },
+  modalAdelantoScrollContent: {
+    padding: 15,
+    paddingBottom: 10,
+  },
+  modalAdelantoFooter: {
+    padding: 15,
+    borderTopWidth: 1,
+    borderTopColor: '#dee2e6',
+    backgroundColor: '#f8f9fa',
+  },
+  tableContainer: {
+    borderWidth: 1,
+    borderColor: '#2B4F8C',
+    borderRadius: 5,
+    overflow: 'hidden',
+    marginBottom: 10,
+  },
+  tableHeader: {
+    flexDirection: 'row',
+    backgroundColor: '#2B4F8C',
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+  },
+  tableHeaderText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  tableColumnInfo: {
+    flex: 3,
+  },
+  tableColumnSelect: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  tableRow: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: '#dee2e6',
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    backgroundColor: '#fff',
+  },
+  tableRowSelected: {
+    backgroundColor: '#e3f2fd',
+  },
+  tableCellText: {
+    fontSize: 14,
+    color: '#2B4F8C',
+    marginBottom: 2,
+  },
+  tableCellLabel: {
+    fontWeight: 'bold',
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderWidth: 2,
+    borderColor: '#2B4F8C',
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+  },
+  checkboxSelected: {
+    backgroundColor: '#2B4F8C',
+  },
+  checkboxMark: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  totalText: {
+    fontSize: 16,
+    color: '#2B4F8C',
+    fontWeight: 'bold',
+    marginTop: 4,
+    marginBottom: 12,
+  },
   accountDetails: {
     marginTop: 10,
     padding: 10,
@@ -597,6 +929,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     height: 50,
     backgroundColor: '#fff',
+  },
+  inputDisabled: {
+    backgroundColor: '#e9ecef',
+    opacity: 0.8,
   },
   currencySymbol: {
     fontSize: 18,
@@ -632,10 +968,63 @@ const styles = StyleSheet.create({
   continueButtonDisabled: {
     backgroundColor: '#A0AEC0',
   },
+  continueButtonAdelanto: {
+    marginTop: 0,
+    marginBottom: 20,
+  },
   continueButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  loansListContainer: {
+    marginBottom: 10,
+  },
+  loanListItem: {
+    padding: 14,
+    marginBottom: 10,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#dee2e6',
+    backgroundColor: '#fff',
+  },
+  loanListItemSelected: {
+    borderColor: '#2B4F8C',
+    backgroundColor: '#E8EEF7',
+  },
+  loanListItemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    marginBottom: 6,
+  },
+  loanListCode: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#2B4F8C',
+  },
+  loanListBadge: {
+    fontSize: 13,
+    color: '#495057',
+  },
+  loanListItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  loanListLabel: {
+    fontSize: 13,
+    color: '#6c757d',
+    marginRight: 4,
+  },
+  loanListValue: {
+    fontSize: 14,
+    color: '#212529',
+    fontWeight: '500',
+  },
+  loanListItemSelectedText: {
+    color: '#2B4F8C',
   },
   pickerContainer: {
     borderWidth: 1,
@@ -643,10 +1032,12 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     marginBottom: 15,
     overflow: 'hidden',
+    backgroundColor: '#fff',
   },
   picker: {
     height: 40,
     width: '100%',
+    color: '#2B4F8C',
   },
   scrollView: {
     flex: 1,
@@ -654,6 +1045,5 @@ const styles = StyleSheet.create({
   },
   scrollViewContent: {
     flexGrow: 1,
-    paddingBottom: 20,
   },
 });

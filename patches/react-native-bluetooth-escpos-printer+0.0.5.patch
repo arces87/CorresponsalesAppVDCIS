@@ -71,3 +71,48 @@ index d86e4f5..09e9de1 100644
 +    // No necesitamos support-v4 ya que React Native y el proyecto principal ya proporcionan AndroidX
 +    implementation "com.google.zxing:core:3.5.2"
  }
++
++diff --git a/node_modules/react-native-bluetooth-escpos-printer/index.js b/node_modules/react-native-bluetooth-escpos-printer/index.js
++index 1234567..abcdefg 100644
++--- a/node_modules/react-native-bluetooth-escpos-printer/index.js
+++++ b/node_modules/react-native-bluetooth-escpos-printer/index.js
++@@ -1,8 +1,10 @@
++
++ import { NativeModules } from 'react-native';
++- const {BluetoothManager,BluetoothEscposPrinter,BluetoothTscPrinter}= NativeModules;
++-
++-BluetoothTscPrinter.DIRECTION = {
+++const { BluetoothManager, BluetoothEscposPrinter, BluetoothTscPrinter } = NativeModules;
+++
+++// Evitar "Cannot set properties of undefined (setting 'DIRECTION')" cuando el módulo nativo no está enlazado
+++if (BluetoothTscPrinter) {
+++  BluetoothTscPrinter.DIRECTION = {
++     FORWARD: 0,
++     BACKWARD: 1
++ };
++@@ -108,9 +113,11 @@ BluetoothTscPrinter.READABLE={
++   DISABLE:0,
++   EANBLE:1
++ };
++-
++-BluetoothEscposPrinter.ERROR_CORRECTION = {
+++}
+++
+++if (BluetoothEscposPrinter) {
+++  BluetoothEscposPrinter.ERROR_CORRECTION = {
++     L:1,
++     M:0,
++     Q:3,
++     H:2
++@@ -137,5 +144,8 @@ BluetoothEscposPrinter.ALIGN={
++     RIGHT:2
++ };
++ }
++
++- module.exports ={
++-    BluetoothManager,BluetoothEscposPrinter,BluetoothTscPrinter};
+++module.exports = {
+++  BluetoothManager,
+++  BluetoothEscposPrinter,
+++  BluetoothTscPrinter
+++};

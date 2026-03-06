@@ -3,7 +3,7 @@ import { Picker } from '@react-native-picker/picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useContext, useEffect, useState } from 'react';
-import { ActivityIndicator, Dimensions, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Dimensions, Platform, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import CustomModal from '../components/CustomModal';
 import { AuthContext } from '../context/AuthContext';
@@ -36,6 +36,9 @@ export default function CrearClienteScreen() {
     const [fechaNacimiento, setFechaNacimiento] = useState('');
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [fechaTemporal, setFechaTemporal] = useState('');
+    const [generarPrevisionSocial, setGenerarPrevisionSocial] = useState(true);
+    const [camposHabilitados, setCamposHabilitados] = useState(false);
+    const [buscandoPersona, setBuscandoPersona] = useState(false);
     
     const onChangeFechaNacimiento = (event, selectedDate) => {
         if (Platform.OS === 'web') {
@@ -84,21 +87,16 @@ export default function CrearClienteScreen() {
     };
     
     const validateIdentification = (id) => {
-        // Validar que sea numérico y tenga 8 dígitos para cédula ecuatoriana
-        return /^[0-9]{8}$/.test(id);
+        // Validar que sea numérico (sin restricción de longitud)
+        return /^[0-9]+$/.test(id);
     };
 
-    // Cargar tipos de identificación
+    // Cargar tipos de identificación - siempre usar el primero (DOCUMENTO NACIONAL DE IDENTIDAD)
     useEffect(() => {
         if (!loadingCatalogos && catalogos?.tiposIdentificaciones?.length > 0) {
             const firstTipoId = String(catalogos.tiposIdentificaciones[0].secuencial);
-            setTipoIdentificacion(prev => {
-                // Solo establecer si no hay un valor ya seleccionado o si el valor actual no existe en las opciones
-                if (!prev || !catalogos.tiposIdentificaciones.some(t => String(t.secuencial) === prev)) {
-                    return firstTipoId;
-                }
-                return prev;
-            });
+            // Forzar siempre el primer tipo de identificación
+            setTipoIdentificacion(firstTipoId);
         } else if (!loadingCatalogos && (!catalogos?.tiposIdentificaciones || catalogos.tiposIdentificaciones.length === 0)) {
             setTipoIdentificacion('');
         }
@@ -136,6 +134,89 @@ export default function CrearClienteScreen() {
         }
     }, [catalogos, loadingCatalogos]);
 
+    const handleBuscarPersona = async () => {
+        if (!identificacion?.trim()) {
+            mostrarAdvertencia('Campo requerido', 'Ingrese el número de identificación');
+            return;
+        }
+        if (!tipoIdentificacion) {
+            mostrarAdvertencia('Campo requerido', 'Seleccione el tipo de identificación');
+            return;
+        }
+        if (!validateIdentification(identificacion.trim())) {
+            mostrarAdvertencia('Identificación inválida', 'El número de identificación debe contener solo números');
+            return;
+        }
+        setBuscandoPersona(true);
+        try {
+            const data = await ApiService.buscarCliente({
+                identificacion: identificacion.trim(),
+                secuencialTipoIdentificacion: parseInt(tipoIdentificacion, 10),
+                usuario: userData?.usuario,
+                ParaCrearSocio: true
+            });
+            if (data && (data.nombres != null || data.identificacion != null)) {
+                setNombres(data.nombres ?? '');
+                const apellidosStr = data.apellidos ?? '';
+                const apellidosPartes = apellidosStr.trim().split(/\s+/);
+                setApellidoPaterno(data.apellidoPaterno ?? apellidosPartes[0] ?? '');
+                setApellidoMaterno(data.apellidoMaterno ?? (apellidosPartes.length > 1 ? apellidosPartes.slice(1).join(' ') : ''));
+                setGenero(data.esMasculino === true || data.genero === 'M' ? 'M' : 'F');
+                setEmail(data.mail ?? data.correoElectronico ?? '');
+                setTelefonoMovil(data.telefonoCelular ?? data.telefono ?? '');
+                setTelefonoDomicilio(data.telefonoDomicilio ?? '');
+                setDireccion(data.direccionDomiciliaria ?? data.direccion ?? '');
+                setReferenciaDomicilio(data.referenciaDomiciliaria ?? '');
+                setPais(data.codigoPais ?? data.pais ?? pais);
+                setEstadoCivil(data.codigoEstadoCivil != null ? String(data.codigoEstadoCivil) : estadoCivil);
+                const fechaNacValor = data.fechaNacimientoCreacion ?? data.fechaNacimiento;
+                if (fechaNacValor) {
+                    const f = new Date(fechaNacValor);
+                    if (!isNaN(f.getTime())) {
+                        setFechaNacimiento(f);
+                        setFechaTemporal(f.toISOString().split('T')[0]);
+                    }
+                }
+                setCamposHabilitados(true);
+                mostrarExito('Persona encontrada', 'Los datos se han cargado. Puede editarlos.');
+            } else {
+                setNombres('');
+                setApellidoPaterno('');
+                setApellidoMaterno('');
+                setGenero('M');
+                setEmail('');
+                setTelefonoMovil('');
+                setTelefonoDomicilio('');
+                setDireccion('');
+                setReferenciaDomicilio('');
+                setPais('');
+                setEstadoCivil('');
+                setFechaNacimiento('');
+                setFechaTemporal('');
+                setCamposHabilitados(true);
+                mostrarAdvertencia('Persona no encontrada', 'Complete los datos del formulario.');
+            }
+        } catch (error) {
+            setNombres('');
+            setApellidoPaterno('');
+            setApellidoMaterno('');
+            setGenero('M');
+            setEmail('');
+            setTelefonoMovil('');
+            setTelefonoDomicilio('');
+            setDireccion('');
+            setReferenciaDomicilio('');
+            setPais('');
+            setEstadoCivil('');
+            setFechaNacimiento('');
+            setFechaTemporal('');
+            setCamposHabilitados(true);
+            mostrarAdvertencia('Persona no encontrada', 'Complete los datos del formulario.');
+        } finally {
+            setBuscandoPersona(false);
+        }
+    };
+
     const validateForm = () => {
         const errors = [];
         
@@ -148,7 +229,7 @@ export default function CrearClienteScreen() {
         if (!identificacion) {
             errors.push('Número de identificación es requerido');
         } else if (!validateIdentification(identificacion)) {
-            errors.push('El número de identificación no es válido (debe tener 8 dígitos)');
+            errors.push('El número de identificación debe contener solo números');
         }
         
         // Validar nombres y apellidos
@@ -201,7 +282,7 @@ export default function CrearClienteScreen() {
             } else if (fechaNac > hoy) {
                 errors.push('La fecha de nacimiento no puede ser futura');
             } else if (edad < 18) {
-                errors.push('El cliente debe ser mayor de edad');
+                errors.push('El socio debe ser mayor de edad');
             }
         }
         
@@ -244,29 +325,38 @@ export default function CrearClienteScreen() {
                 mail: email,
                 direccionDomiciliaria: direccion || '',
                 fechaNacimiento: fechaNacimiento || null,
-                usuario: userData?.usuario
+                usuario: userData?.usuario,
+                generaPrevisionSocial: generarPrevisionSocial
             };
 
+            // Intentar crear el cliente
             const response = await ApiService.crearCliente(clienteData);
 
             // Verificar si la creación fue exitosa
-            if (!response.secuencialCliente) {
-                throw new Error('No se pudo crear el cliente correctamente');
+            if (!response || !response.secuencialCliente) {
+                throw new Error('No se pudo crear el socio correctamente');
             }
 
-            // Proceder con la apertura de cuenta
-            try {
-                const valorApertura = 30;
+            // Si no requiere apertura de cuenta, solo mostrar éxito y terminar
+            if (!response.requiereAperturaCuenta) {
+                mostrarExito('Éxito', 'Los datos del socio fueron actualizados');
+                return;
+            }
+
+            // Solo proceder con la apertura de cuenta cuando requiereAperturaCuenta es true
+            try {  
                 const aperturaResponse = await ApiService.aperturaCuenta({
                     secuencialCuentaSocio: response.secuencialCuenta || null,
-                    secuencialCuentaCorresponsal: 0,
+                    secuencialCuentaCorresponsal: 1,
                     secuencialCliente: response.secuencialCliente,
-                    valorApertura: valorApertura,
+                    valorApertura: response.valorParaApertura,
+                    nombreCliente: nombres + ' ' + apellidopaterno + ' ' + apellidomaterno,
+                    identificacionCliente: identificacion,
                     usuario: userData?.usuario
                 });
 
                 // Verificar si la apertura fue exitosa
-                if (!aperturaResponse.cuentaAperturada) {
+                if (!aperturaResponse || !aperturaResponse.cuentaAperturada) {
                     throw new Error('No se pudo aperturar la cuenta correctamente');
                 }
 
@@ -283,17 +373,20 @@ export default function CrearClienteScreen() {
                 router.replace({
                     pathname: '/comprobante',
                     params: {
-                        monto: valorApertura.toString(),
+                        monto: response.valorParaApertura.toString(),
                         comision: '0',
-                        total: valorApertura.toString(),
+                        total: response.valorParaApertura.toString(),
                         referencia: aperturaResponse.documento || 'N/A',
-                        fecha: fechaActual
+                        fecha: fechaActual,
+                        identificacionCliente: identificacion || '',
+                        usuario: userData?.usuario || '',
+                        negocio: userData?.nombreMostrar || ''
                     }
                 });
             } catch (aperturaError) {
                 console.error('Error al aperturar cuenta:', aperturaError);
                 // Mostrar error pero mantener el cliente creado
-                mostrarError('Error', aperturaError.message || 'El cliente se creó correctamente, pero hubo un error al aperturar la cuenta');
+                mostrarError('Error', aperturaError.message || 'El socio se creó correctamente, pero hubo un error al aperturar la cuenta');
                 // Esperar un momento antes de navegar de vuelta
                 setTimeout(() => {
                     router.back();
@@ -301,7 +394,8 @@ export default function CrearClienteScreen() {
             }
         } catch (error) {
             console.error('Error al crear cliente:', error);
-            mostrarError('Error', error.message || 'Ocurrió un error al crear el cliente');
+            // Si falla la creación del cliente, no se intenta abrir la cuenta
+            mostrarError('Error', error.message || 'Ocurrió un error al crear el socio');
         } finally {
             setLoading(false);
         }
@@ -315,7 +409,11 @@ export default function CrearClienteScreen() {
                 start={{ x: 0.5, y: 0 }}
                 end={{ x: 0.5, y: 1 }}
             >
-                <ScrollView style={styles.scrollContainer}>
+                <ScrollView
+                    style={styles.scrollContainer}
+                    contentContainerStyle={{ flexGrow: 1, paddingBottom: Math.max(30, insets.bottom + 24) }}
+                    showsVerticalScrollIndicator={true}
+                >
                     <View style={styles.headerWrapper}>
                         <View style={[globalStyles.header, { paddingTop: Math.max(insets.top, 20) }]}>
                             <View style={globalStyles.headerContent}>
@@ -326,7 +424,7 @@ export default function CrearClienteScreen() {
                                     <Text style={globalStyles.backArrow}>‹</Text>
                                 </TouchableOpacity>
                                 <View style={globalStyles.headerTitleContainer}>
-                                    <Text style={globalStyles.headerTitle}>CREAR CLIENTE</Text>
+                                    <Text style={globalStyles.headerTitle}>CREAR SOCIO</Text>
                                 </View>
                                 <TouchableOpacity
                                   style={globalStyles.menuButton}
@@ -352,20 +450,18 @@ export default function CrearClienteScreen() {
                                 ) : (
                                     <Picker
                                         selectedValue={tipoIdentificacion}
-                                        onValueChange={(itemValue) => {
-                                            setTipoIdentificacion(itemValue);
-                                        }}
+                                        onValueChange={(itemValue) => itemValue != null && setTipoIdentificacion(itemValue)}
                                         style={styles.picker}
                                         dropdownIconColor="#2B4F8C"
-                                        enabled={!loadingCatalogos && catalogos?.tiposIdentificaciones?.length > 0}
+                                        enabled={camposHabilitados}
                                     >
-                                        {catalogos?.tiposIdentificaciones?.map((tipo) => (
+                                        {catalogos?.tiposIdentificaciones?.length > 0 && (
                                             <Picker.Item 
-                                                key={tipo.secuencial} 
-                                                label={tipo.nombre} 
-                                                value={String(tipo.secuencial)} 
+                                                key={catalogos.tiposIdentificaciones[0].secuencial} 
+                                                label={catalogos.tiposIdentificaciones[0].nombre} 
+                                                value={String(catalogos.tiposIdentificaciones[0].secuencial)} 
                                             />
-                                        ))}
+                                        )}
                                     </Picker>
                                 )}
                             </View>
@@ -381,37 +477,51 @@ export default function CrearClienteScreen() {
                                 keyboardType="numeric"
                                 placeholderTextColor="#999"
                             />
+                            <TouchableOpacity
+                                style={[styles.buscarPersonaButton, buscandoPersona && styles.buttonDisabled]}
+                                onPress={handleBuscarPersona}
+                                disabled={buscandoPersona}
+                            >
+                                {buscandoPersona ? (
+                                    <ActivityIndicator color="#fff" size="small" />
+                                ) : (
+                                    <Text style={styles.buscarPersonaButtonText}>Buscar persona</Text>
+                                )}
+                            </TouchableOpacity>
                         </View>                    
 
                         <View style={styles.formGroup}>
                             <Text style={styles.label}>Nombres *</Text>
                             <TextInput
-                                style={styles.input}
+                                style={[styles.input, !camposHabilitados && styles.inputDisabled]}
                                 value={nombres}
                                 onChangeText={setNombres}
                                 placeholder="Ingrese los nombres"
                                 placeholderTextColor="#999"
+                                editable={camposHabilitados}
                             />
                         </View>
 
                         <View style={styles.formGroup}>
                             <Text style={styles.label}>Apellido Paterno *</Text>
                             <TextInput
-                                style={styles.input}
+                                style={[styles.input, !camposHabilitados && styles.inputDisabled]}
                                 value={apellidopaterno}
                                 onChangeText={setApellidoPaterno}
                                 placeholder="Ingrese apellido paterno"
                                 placeholderTextColor="#999"
+                                editable={camposHabilitados}
                             />
                         </View>
                         <View style={styles.formGroup}>
                             <Text style={styles.label}>Apellido Materno *</Text>
                             <TextInput
-                                style={styles.input}
+                                style={[styles.input, !camposHabilitados && styles.inputDisabled]}
                                 value={apellidomaterno}
                                 onChangeText={setApellidoMaterno}
                                 placeholder="Ingrese apellido materno"
                                 placeholderTextColor="#999"
+                                editable={camposHabilitados}
                             />
                         </View>
 
@@ -423,6 +533,7 @@ export default function CrearClienteScreen() {
                                     onValueChange={setGenero}
                                     style={styles.picker}
                                     dropdownIconColor="#2B4F8C"
+                                    enabled={camposHabilitados}
                                 >
                                     <Picker.Item label="Masculino" value="M" />
                                     <Picker.Item label="Femenino" value="F" />
@@ -441,15 +552,18 @@ export default function CrearClienteScreen() {
                                     max={new Date().toISOString().split('T')[0]}
                                     style={styles.webDateInput}
                                     required
+                                    disabled={!camposHabilitados}
                                 />
                             ) : (
                                 <>
                                     <TouchableOpacity 
                                         style={[
                                             styles.dateInput,                                            
-                                            { width: '100%' }
+                                            { width: '100%' },
+                                            !camposHabilitados && styles.inputDisabled
                                         ]} 
                                         onPress={showDatepicker}
+                                        disabled={!camposHabilitados}
                                     >
                                         <Text style={[styles.dateText, !fechaNacimiento && { color: '#999' }]}>
                                             {fechaNacimiento ? fechaNacimiento.toLocaleDateString('es-EC', {
@@ -477,50 +591,54 @@ export default function CrearClienteScreen() {
                         <View style={styles.formGroup}>
                             <Text style={styles.label}>Teléfono Móvil *</Text>
                             <TextInput
-                                style={styles.input}
+                                style={[styles.input, !camposHabilitados && styles.inputDisabled]}
                                 value={telefonoMovil}
                                 onChangeText={setTelefonoMovil}
                                 placeholder="Ingrese el número de teléfono móvil"
                                 keyboardType="phone-pad"
                                 placeholderTextColor="#999"
                                 maxLength={15}
+                                editable={camposHabilitados}
                             />
                         </View>
 
                         <View style={styles.formGroup}>
                             <Text style={styles.label}>Teléfono Domicilio</Text>
                             <TextInput
-                                style={styles.input}
+                                style={[styles.input, !camposHabilitados && styles.inputDisabled]}
                                 value={telefonoDomicilio}
                                 onChangeText={setTelefonoDomicilio}
                                 placeholder="Ingrese el teléfono de domicilio (opcional)"
                                 keyboardType="phone-pad"
                                 placeholderTextColor="#999"
                                 maxLength={15}
+                                editable={camposHabilitados}
                             />
                         </View>
 
                         <View style={styles.formGroup}>
                             <Text style={styles.label}>Dirección *</Text>
                             <TextInput
-                                style={styles.input}
+                                style={[styles.input, !camposHabilitados && styles.inputDisabled]}
                                 value={direccion}
                                 onChangeText={setDireccion}
                                 placeholder="Ingrese la dirección completa"
                                 placeholderTextColor="#999"
+                                editable={camposHabilitados}
                             />
                         </View>
 
                         <View style={styles.formGroup}>
                             <Text style={styles.label}>Referencia de Domicilio</Text>
                             <TextInput
-                                style={styles.input}
+                                style={[styles.input, !camposHabilitados && styles.inputDisabled]}
                                 value={referenciaDomicilio}
                                 onChangeText={setReferenciaDomicilio}
                                 placeholder="Ej: Frente al parque central"
                                 placeholderTextColor="#999"
                                 multiline
                                 numberOfLines={3}
+                                editable={camposHabilitados}
                             />
                         </View>                        
 
@@ -540,7 +658,7 @@ export default function CrearClienteScreen() {
                                         onValueChange={(itemValue) => setPais(itemValue)}
                                         style={styles.picker}
                                         dropdownIconColor="#2B4F8C"
-                                        enabled={!loadingCatalogos && catalogos?.paises?.length > 0}
+                                        enabled={camposHabilitados && !loadingCatalogos && catalogos?.paises?.length > 0}
                                     >                                    
                                         {catalogos?.paises?.map((paisItem) => (
                                             <Picker.Item 
@@ -570,7 +688,7 @@ export default function CrearClienteScreen() {
                                         onValueChange={(itemValue) => setEstadoCivil(itemValue)}
                                         style={styles.picker}
                                         dropdownIconColor="#2B4F8C"
-                                        enabled={!loadingCatalogos && catalogos?.estadoCivil?.length > 0}
+                                        enabled={camposHabilitados && !loadingCatalogos && catalogos?.estadoCivil?.length > 0}
                                     >                                    
                                         {catalogos?.estadoCivil?.map((estado) => (
                                             <Picker.Item 
@@ -584,6 +702,7 @@ export default function CrearClienteScreen() {
                             </View>
                         </View>
 
+                        {false && (
                         <View style={styles.formGroup}>
                             <Text style={styles.label}>Huella Dactilar</Text>
                             <TextInput
@@ -595,17 +714,29 @@ export default function CrearClienteScreen() {
                                 maxLength={50}
                             />
                         </View>
+                        )}
 
                         <View style={styles.formGroup}>
                             <Text style={styles.label}>Correo Electrónico *</Text>
                             <TextInput
-                                style={styles.input}
+                                style={[styles.input, !camposHabilitados && styles.inputDisabled]}
                                 value={email}
                                 onChangeText={setEmail}
                                 placeholder="ejemplo@correo.com"
                                 keyboardType="email-address"
                                 autoCapitalize="none"
                                 placeholderTextColor="#999"
+                                editable={camposHabilitados}
+                            />
+                        </View>
+
+                        <View style={styles.checkboxArea}>
+                            <Text style={styles.checkboxLabel}>Generar Previsión Social</Text>
+                            <Switch
+                                value={generarPrevisionSocial}
+                                onValueChange={setGenerarPrevisionSocial}
+                                trackColor={{ false: '#ccc', true: '#2B4F8C' }}
+                                thumbColor="#fff"
                             />
                         </View>
                         
@@ -660,7 +791,6 @@ const styles = StyleSheet.create({
     scrollContainer: {
         flex: 1,
         width: '100%',
-        paddingBottom: 30,
     },
     headerWrapper: {
         width: '92%',
@@ -669,6 +799,19 @@ const styles = StyleSheet.create({
     },
     formGroup: {
         marginBottom: 15,
+    },
+    checkboxArea: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 20,
+        paddingVertical: 12,
+        paddingHorizontal: 4,
+    },
+    checkboxLabel: {
+        color: '#2B4F8C',
+        fontSize: 16,
+        fontWeight: '500',
     },
     label: {
         color: '#2B4F8C',
@@ -683,6 +826,25 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: '#ddd',
         color: '#333',
+    },
+    inputDisabled: {
+        backgroundColor: '#e9ecef',
+        color: '#6c757d',
+    },
+    buscarPersonaButton: {
+        backgroundColor: '#2B4F8C',
+        borderRadius: 8,
+        padding: 12,
+        alignItems: 'center',
+        marginTop: 10,
+    },
+    buscarPersonaButtonText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    buttonDisabled: {
+        opacity: 0.7,
     },
     dateInput: {
         backgroundColor: '#fff',

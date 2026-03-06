@@ -122,8 +122,8 @@ export default function CrearCuentaScreen() {
           resultado.secuencialEmpresa);
       } catch (error) {
         console.error('Error al buscar cliente:', error);
-        setError(error.message || 'Error al buscar el cliente');
-        mostrarError('Error', error.message || 'No se pudo encontrar el cliente');
+        setError(error.message || 'Error al buscar el socio');
+        mostrarError('Error', error.message || 'No se pudo encontrar el socio');
       } finally {
         setLoading(false);
       }
@@ -136,7 +136,7 @@ export default function CrearCuentaScreen() {
     }
 
     if (!cliente?.secuencialCliente) {
-      mostrarError('Error', 'No se encontró la información del cliente');
+      mostrarError('Error', 'No se encontró la información del socio');
       return;
     }    
 
@@ -248,7 +248,7 @@ export default function CrearCuentaScreen() {
               {loading ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.buttonText}>BUSCAR CLIENTE</Text>
+                <Text style={styles.buttonText}>BUSCAR SOCIO</Text>
               )}
             </TouchableOpacity>
 
@@ -384,10 +384,12 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     marginBottom: 15,
     overflow: 'hidden',
+    backgroundColor: '#fff',
   },
   picker: {
     height: 40,
     width: '100%',
+    color: '#2B4F8C',
   },
   button: {
     padding: 15,

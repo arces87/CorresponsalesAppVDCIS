@@ -4,6 +4,7 @@ import { useContext, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Keyboard,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -98,7 +99,7 @@ const OtpVerificacionScreen = () => {
           try {
             const result = await ApiService.solicitarOtp({
               usuario: userData?.usuario,
-              identificacion: userData?.identificacion,
+              identificacion: userData?.identificacioncliente,
               secuencialTipoIdentificacion: userData?.secuencialTipoIdentificacion,
               paraAgente: false, 
             });
@@ -221,8 +222,8 @@ const OtpVerificacionScreen = () => {
               }
             }
           } catch (error) {
-            mostrarError('Error', 'Error al solicitar OTP del cliente: ' + error.message);
-            console.error('Error al solicitar OTP del cliente:', error.message);
+            mostrarError('Error', 'Error al solicitar OTP del socio: ' + error.message);
+            console.error('Error al solicitar OTP del socio:', error.message);
             return;
           }
         }
@@ -243,7 +244,7 @@ const OtpVerificacionScreen = () => {
 
     // Validar código del cliente si está habilitado
     if (validarOtpCliente && otpCode.length !== 6) {
-      mostrarAdvertencia('Código incompleto', 'Por favor ingrese el código OTP del cliente completo');
+      mostrarAdvertencia('Código incompleto', 'Por favor ingrese el código OTP del socio completo');
       return;
     }
 
@@ -316,7 +317,7 @@ const OtpVerificacionScreen = () => {
         respuestaServicio.monto = response.valor;
       }
 
-      if (accionTransaccion === 'prestamo') {
+      if (accionTransaccion === 'prestamo' || accionTransaccion === 'adelantacuota') {
         console.log('userData', userData);  
         
         const response = await ApiService.efectivizarPrestamo({          
@@ -405,7 +406,7 @@ const OtpVerificacionScreen = () => {
         if (reciboData) {
           const reciboObj = {
             id: userData?.referencia,
-            numero: reciboData.numero,
+            numero: String(reciboData.numero ?? '').trim(),
             fechaVencimiento: reciboData.fechaVencimiento
           }; 
           
@@ -458,7 +459,15 @@ const OtpVerificacionScreen = () => {
           monto: respuestaServicio.monto,
           comision: comision,
           total: total,
-          referencia: respuestaServicio.numeroTransaccion
+          referencia: respuestaServicio.numeroTransaccion,
+          labelTransaccion: labelTransaccion || '',
+          nombreSocio: userData?.nombrecliente || '',
+          numeroCuenta: respuestaServicio.numeroCuenta || userData?.numerocuentacliente || '',
+          codigoOperacion: respuestaServicio.numeroTransaccion || '',
+          observacion: userData?.observacionDeposito || '',
+          usuario: userData?.usuario || '',
+          negocio: userData?.nombreMostrar || '',
+          identificacionCliente: userData?.identificacioncliente || ''
         }
       });
 
@@ -499,36 +508,61 @@ const OtpVerificacionScreen = () => {
           </View>
         </View>
 
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(24, insets.bottom + 24) }]}
+          showsVerticalScrollIndicator={true}
+          keyboardShouldPersistTaps="handled"
+        >
         <View style={styles.card}>
           <Text style={styles.instruction}>
             Si se solicita código de verificación para completar la operación, por favor consulte su teléfono y/o correo electrónico e ingrese el código recibido. 
           </Text>
 
           <View style={styles.transactionInfo}>
-            <Text style={styles.transactionType}>
-              Datos de la transacción: {labelTransaccion}
-            </Text>
-            <Text style={styles.transactionType}>
-              Cliente: {userData?.nombrecliente || userData?.recibo?.nombreCliente || userData?.recibo?.nombre || userData?.recibo?.titular || 'N/A'}
-            </Text>
-            <Text style={styles.transactionType}>
-              Identificacion: {userData?.identificacioncliente || userData?.identificaciontitular || userData?.recibo?.identificacion || 'N/A'}
-            </Text>
-            <Text style={styles.transactionType}>
-              Cuenta: {userData?.numerocuentacliente || userData?.codigoprestamo}
-            </Text>
-            <Text style={styles.transactionType}>
-              Valor: S/{parseFloat(monto).toFixed(2)}
-            </Text>
-            <Text style={styles.transactionType}>
-              Comisión: S/{parseFloat(comision).toFixed(2)}
-            </Text>
-            <Text style={styles.amount}>Total: S/{parseFloat(total).toFixed(2)}</Text>
+            {labelTransaccion != null && String(labelTransaccion).trim() !== '' && (
+              <Text style={styles.transactionType}>
+                Datos de la transacción: {labelTransaccion}
+              </Text>
+            )}
+            {(userData?.nombrecliente || userData?.recibo?.titularCuenta) != null && String(userData?.nombrecliente || userData?.recibo?.titularCuenta || '').trim() !== '' && (
+              <Text style={styles.transactionType}>
+                Socio: {userData?.nombrecliente || userData?.recibo?.titularCuenta}
+              </Text>
+            )}
+            {(userData?.identificacioncliente || userData?.identificaciontitular || userData?.recibo?.identificacion) != null && String(userData?.identificacioncliente || userData?.identificaciontitular || userData?.recibo?.identificacion || '').trim() !== '' && (
+              <Text style={styles.transactionType}>
+                Identificacion: {userData?.identificacioncliente || userData?.identificaciontitular || userData?.recibo?.identificacion}
+              </Text>
+            )}
+            {(userData?.numerocuentacliente || userData?.codigoprestamo || userData?.referencia) != null && String(userData?.numerocuentacliente || userData?.codigoprestamo || userData?.referencia || '').trim() !== '' && (
+              <Text style={styles.transactionType}>
+                Cuenta: {userData?.numerocuentacliente || userData?.codigoprestamo || userData?.referencia}
+              </Text>
+            )}
+            {userData?.tipoRegistroFirma != null && userData?.tipoRegistroFirma !== '' && (
+              <Text style={styles.transactionType}>
+                Cuenta registro: {userData?.tipoRegistroFirma}
+              </Text>
+            )}
+            {monto != null && monto !== '' && !isNaN(parseFloat(monto)) && (
+              <Text style={styles.transactionType}>
+                Valor: S/{parseFloat(monto).toFixed(2)}
+              </Text>
+            )}
+            {comision != null && comision !== '' && !isNaN(parseFloat(comision)) && (
+              <Text style={styles.transactionType}>
+                Comisión: S/{parseFloat(comision).toFixed(2)}
+              </Text>
+            )}
+            {total != null && total !== '' && !isNaN(parseFloat(total)) && (
+              <Text style={styles.amount}>Total: S/{parseFloat(total).toFixed(2)}</Text>
+            )}
           </View>
 
           {validarOtpCliente && (
             <>
-              <Text style={styles.otpLabel}>Código del Cliente</Text>
+              <Text style={styles.otpLabel}>Código del Socio</Text>
               <View style={styles.otpContainer}>
                 {otp.map((digit, index) => (
                   <View key={`client-${index}`} style={styles.otpBox}>
@@ -621,6 +655,7 @@ const OtpVerificacionScreen = () => {
           </View>
           )}
         </View>
+        </ScrollView>
       </LinearGradient>
       <CustomModal
         visible={modalVisible}
@@ -643,6 +678,16 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
     justifyContent: 'flex-start',
+  },
+  scrollView: {
+    flex: 1,
+    width: '100%',
+  },
+  scrollContent: {
+    flexGrow: 1,
+    width: '100%',
+    paddingBottom: 24,
+    alignItems: 'center',
   },
   headerWrapper: {
     width: '92%',
@@ -690,6 +735,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
     width: '90%',
     maxWidth: 500,
+    alignSelf: 'center',
     borderRadius: 12,
     padding: 25,
     marginBottom: 20,

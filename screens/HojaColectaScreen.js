@@ -99,7 +99,7 @@ export default function HojaColectaScreen() {
           monto: t.valor || t.monto || t.importe || 0,
           valor: t.valor || t.monto || t.importe || 0,
           fecha: t.fecha || t.fechaSistema || t.fechaTransaccion || new Date().toISOString(),
-          cliente: t.nombreCliente || t.cliente || t.nombre || 'Cliente',
+          cliente: t.nombreCliente || t.cliente || t.nombre || 'Socio',
           cuenta: t.numeroCuenta || t.cuenta || 'Cuenta',
           identificacionCliente: t.identificacionCliente || t.identificacion || ''
         }));
@@ -255,7 +255,7 @@ export default function HojaColectaScreen() {
         <View style={styles.mainContainer}>
           <ScrollView 
             style={styles.scrollView}
-            contentContainerStyle={styles.scrollContent}
+            contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(20, insets.bottom + 16) }]}
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}
@@ -398,8 +398,8 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   scrollContent: {
-    paddingBottom: 20,
     paddingTop: 10,
+    flexGrow: 1,
   },
   headerWrapper: {
     width: '100%',

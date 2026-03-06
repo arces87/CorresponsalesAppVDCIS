@@ -90,27 +90,7 @@ const AlertasScreen = () => {
   }
 
   return (
-    <LinearGradient
-      colors={['#2B4F8C', '#2BAC6B']}
-      style={styles.gradient}
-      start={{ x: 0.5, y: 0 }}
-      end={{ x: 0.5, y: 1 }}
-    >
-      <View style={[styles.header, { paddingTop: Math.max(insets.top, 20) }]}>
-        <View style={styles.headerContent}>
-          <View style={{ width: 50 }} />
-          <View style={styles.headerTitleContainer}>
-            <Text style={styles.headerTitle}>INGRESAR ALERTA</Text>
-          </View>
-          <TouchableOpacity
-            style={styles.menuButton}
-            onPress={() => router.push('/menu')}
-          >
-            <Text style={styles.menuIcon}>☰</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
+    <View style={styles.container}>
       <View style={styles.formContainer}>
         <Text style={styles.label}>Tipo de Alerta</Text>
         <View style={styles.pickerContainer}>
@@ -154,7 +134,7 @@ const AlertasScreen = () => {
         buttonText={modalData.buttonText}
         onClose={cerrarModal}
       />
-    </LinearGradient>
+    </View>
   );
 };
 
@@ -163,59 +143,8 @@ const { width } = Dimensions.get('window');
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  gradient: {
-    flex: 1,
     width: '100%',
     alignItems: 'center',
-  },
-  header: {
-    width: '100%',
-    alignItems: 'center',
-  },
-  headerContent: {
-    width: '100%',
-    maxWidth: 500,
-    paddingHorizontal: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-  },
-  headerTitleContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: -20, // Compensar el ancho del botón de retroceso
-    marginRight: -20, // Compensar el ancho del botón de menú
-  },
-  menuButton: {
-    zIndex: 1,
-    padding: 10,
-    minWidth: 50,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  menuIcon: {
-    color: '#fff',
-    fontSize: 24,
-    fontWeight: 'bold',
-  },
-  backButton: {
-    zIndex: 1,
-    padding: 10,
-    minWidth: 50, // Asegurar ancho consistente
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  backArrow: {
-    color: '#fff',
-    fontSize: 35,
-    fontWeight: 'bold',
-  },
-  headerTitle: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: 'bold',
   },
   formContainer: {
     flex: 1,
@@ -243,10 +172,12 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     marginBottom: 15,
     overflow: 'hidden',
+    backgroundColor: '#fff',
   },
   picker: {
     height: 40,
     width: '100%',
+    color: '#2B4F8C',
   },
   textInput: {
     borderBottomWidth: 1,

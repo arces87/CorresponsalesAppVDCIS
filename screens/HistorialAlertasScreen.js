@@ -1,4 +1,3 @@
-import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import React, { useContext, useEffect, useState } from 'react';
 import { ActivityIndicator, Dimensions, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -48,43 +47,15 @@ const HistorialAlertasScreen = () => {
 
   if (loading) {
     return (
-      <LinearGradient
-        colors={['#2B4F8C', '#2BAC6B']}
-        style={styles.gradient}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
-      >
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#fff" />
-          <Text style={styles.loadingText}>Cargando alertas...</Text>
-        </View>
-      </LinearGradient>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#fff" />
+        <Text style={styles.loadingText}>Cargando alertas...</Text>
+      </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <LinearGradient
-        colors={['#2B4F8C', '#2BAC6B']}
-        style={styles.gradient}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
-      >
-        <View style={[styles.header, { paddingTop: Math.max(insets.top, 20) }]}>
-          <View style={styles.headerContent}>
-            <View style={{ width: 50 }} />
-            <View style={styles.headerTitleContainer}>
-              <Text style={styles.headerTitle}>HISTORIAL DE ALERTAS</Text>
-            </View>
-            <TouchableOpacity
-              style={styles.menuButton}
-              onPress={() => router.push('/menu')}
-            >
-              <Text style={styles.menuIcon}>☰</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
       <View style={styles.card}>
         <FlatList
           data={alertas}
@@ -106,7 +77,6 @@ const HistorialAlertasScreen = () => {
           contentContainerStyle={styles.listContainer}
         />
       </View>
-      </LinearGradient>
     </View>
   );
 };
@@ -118,48 +88,6 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     alignItems: 'center',
-    backgroundColor: '#2B4F8C',
-  },
-  gradient: {
-    flex: 1,
-    width: '100%',
-    alignItems: 'center',
-  },
-  header: {
-    width: '100%',
-    alignItems: 'center',
-  },
-  headerContent: {
-    width: '100%',
-    maxWidth: 500,
-    paddingHorizontal: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-  },
-  headerTitleContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: -20, // Compensar el ancho del botón de retroceso
-    marginRight: -20, // Compensar el ancho del botón de menú
-  },
-  backButton: {
-    zIndex: 1,
-    padding: 10,
-    minWidth: 50, // Asegurar ancho consistente
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  backArrow: {
-    color: '#fff',
-    fontSize: 35,
-    fontWeight: 'bold',
-  },
-  headerTitle: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: 'bold',
   },
   card: {
     flex: 1,
@@ -231,18 +159,6 @@ const styles = StyleSheet.create({
     color: '#2B4F8C',
     fontSize: 16,
     textAlign: 'center',
-  },
-  menuButton: {
-    zIndex: 1,
-    padding: 10,
-    minWidth: 50,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  menuIcon: {
-    color: '#fff',
-    fontSize: 24,
-    fontWeight: 'bold',
   },
 });
 

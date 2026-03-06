@@ -1,13 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Device from 'expo-device';
 import LocationService from './LocationService';
 import NetworkService from './NetworkService';
 
 // Función para generar un GUID tipo hash hexa padded
-function getGUID(imei) {
+function getGUID(mac) {
   let hash = 0;
-  if (!imei) return '';
-  for (let i = 0; i < imei.length; i++) {
-    hash = ((hash << 5) - hash) + imei.charCodeAt(i);
+  if (!mac) return '';
+  for (let i = 0; i < mac.length; i++) {
+    hash = ((hash << 5) - hash) + mac.charCodeAt(i);
     hash |= 0;
   }
   return Math.abs(hash).toString(16).padStart(16, '0');
@@ -21,7 +22,7 @@ const BASE_URL = 'http://190.116.29.99:9001/api/v1.0';
 // Obtener MAC (AndroidID) de forma segura
 
 let mac = '';
-/*
+
 try {
   mac = Device.osInternalBuildId || Device.deviceName || Device.modelId || '';
 } catch (error) {
@@ -30,7 +31,7 @@ try {
 }
 // IMEI es un GUID calculado a partir de la MAC
 let imei = getGUID(mac);
-*/
+
 //mac = '022b5f75d756b285';
 //imei = '88F33DE43A5D40F4F5C4B86397B96A0B';
 mac = 'RP1A.200720.011';
@@ -134,8 +135,11 @@ class ApiService {
         location = { latitud: 0, longitud: 0 };
       }
       
+      const usuarioMayusculas = (usuario != null && usuario !== '')
+        ? String(usuario).trim().toUpperCase()
+        : usuario;
       const body = {
-        usuario,
+        usuario: usuarioMayusculas,
         contrasenia,
         imei,
         mac,
@@ -334,9 +338,10 @@ class ApiService {
    * @param {string} params.identificacion - Número de identificación del cliente
    * @param {number} params.secuencialTipoIdentificacion - ID del tipo de identificación
    * @param {string} params.usuario - Nombre de usuario del corresponsal
+   * @param {boolean} [params.ParaCrearSocio=false] - true cuando la búsqueda es para el flujo de crear socio
    * @returns {Promise<Object>} - Datos del cliente encontrado
    */
-  static async buscarCliente({ identificacion, secuencialTipoIdentificacion, usuario }) {
+  static async buscarCliente({ identificacion, secuencialTipoIdentificacion, usuario, ParaCrearSocio = false }) {
     const url = `${BASE_URL}/Cliente/buscarCliente`;
     try {
       const isConnected = await NetworkService.checkConnection();
@@ -350,6 +355,7 @@ class ApiService {
         identificacion,
         secuencialTipoIdentificacion,
         usuario,
+        ParaCrearSocio: ParaCrearSocio === true,
         imei,
         mac,
         latitud: location.latitud,
@@ -396,6 +402,7 @@ class ApiService {
    * @param {number} params.numeroCliente - Número de cliente (opcional)
    * @param {number} params.secuencialEmpresa - ID de la empresa (opcional)
    * @param {string} params.usuario - Nombre de usuario del corresponsal
+   * @param {boolean} [params.esParaDeposito] - Indica si la consulta es para operación de depósito
    * @returns {Promise<Object>} - Datos de las cuentas del cliente
    */
   static async buscarCuentas({ 
@@ -403,7 +410,8 @@ class ApiService {
     secuencialTipoIdentificacion, 
     numeroCliente, 
     secuencialEmpresa, 
-    usuario 
+    usuario,
+    esParaDeposito 
   }) {
     const url = `${BASE_URL}/Cuenta/buscarCuentas`;
     try {
@@ -421,6 +429,7 @@ class ApiService {
         numeroCliente: numeroCliente || null,
         secuencialEmpresa: secuencialEmpresa || null,
         usuario: usuario || null,
+        esParaDeposito: esParaDeposito ?? null,
         imei,
         mac,
         latitud: location.latitud,
@@ -1324,6 +1333,79 @@ class ApiService {
   }
 
   /**
+   * Obtiene la información de cuotas y valor adelanto de un préstamo
+   * @param {Object} params - Parámetros para la solicitud
+   * @param {number} params.secuencialPrestamo - Secuencial del préstamo
+   * @param {string} [params.usuario] - Nombre de usuario
+   * @returns {Promise<Object>} - Objeto con listCuotasValorAdelanto (array de { numeroCuota, valor, fechaVencimiento })
+   */
+  static async informacionCuotas({ secuencialPrestamo, usuario } = {}) {
+    const url = `${BASE_URL}/Prestamo/informacionCuotas`;
+
+    try {
+      const isConnected = await NetworkService.checkConnection();
+      const token = await this.getAuthToken();
+
+      if (!isConnected) {
+        throw new Error('Sin conexión a internet');
+      }
+
+      const location = await LocationService.getLocation();
+
+      const body = {
+        secuencialPrestamo: secuencialPrestamo != null ? secuencialPrestamo : null,
+        usuario: usuario || null,
+        imei: imei || null,
+        latitud: location.latitud,
+        longitud: location.longitud,
+        mac: mac || null
+      };
+
+      console.log('Solicitando información de cuotas a:', url);
+      console.log('Datos enviados:', JSON.stringify(body, null, 2));
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token ? `Bearer ${token}` : ''
+        },
+        body: JSON.stringify(body)
+      });
+
+      const responseText = await response.text();
+
+      if (!response.ok) {
+        let errorMessage = `Error al obtener información de cuotas (${response.status})`;
+        if (responseText) {
+          try {
+            const errorData = JSON.parse(responseText);
+            errorMessage = errorData.message || errorData.title || errorMessage;
+          } catch (e) {
+            errorMessage = responseText;
+          }
+        }
+        console.error('Error en la respuesta:', errorMessage);
+        throw new Error(errorMessage);
+      }
+
+      try {
+        const data = responseText ? JSON.parse(responseText) : {};
+        // Esquema: NumeroCuotasValorAdelantoListaResponse { listaCuotasValorAdelanto: CuotaValorAdelantoResponse[] | null }
+        const lista = data.listaCuotasValorAdelanto;
+        const listCuotasValorAdelanto = Array.isArray(lista) ? lista : [];
+        return { listCuotasValorAdelanto };
+      } catch (e) {
+        console.error('Error al parsear respuesta JSON:', e);
+        throw new Error('Formato de respuesta inválido');
+      }
+    } catch (error) {
+      console.error('Error en informacionCuotas:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Crea un nuevo cliente en el sistema
    * @param {Object} params - Datos del cliente a crear
    * @param {number} [params.secuencialTipoIdentificacion] - ID del tipo de identificación
@@ -1404,6 +1486,7 @@ class ApiService {
         codigoDactilar: params.codigoDactilar || null,
         mail: params.mail || null,
         usuario: params.usuario || null,
+        GeneraPrevisionSocial: params.generaPrevisionSocial === true,
         imei: params.imei || imei || null,
         latitud: params.latitud !== undefined ? params.latitud : location.latitud,
         longitud: params.longitud !== undefined ? params.longitud : location.longitud,
@@ -2703,6 +2786,8 @@ class ApiService {
    * @param {number} params.secuencialCuentaCorresponsal - ID de la cuenta del corresponsal
    * @param {number} params.secuencialCliente - ID del cliente
    * @param {number} params.valorApertura - Valor de apertura de la cuenta
+   * @param {string} [params.nombreCliente] - Nombre del cliente
+   * @param {string} [params.identificacionCliente] - Identificación del cliente
    * @param {string} [params.usuario] - Usuario que realiza la operación
    * @param {string} [params.imei] - IMEI del dispositivo (opcional)
    * @param {number} [params.latitud] - Latitud de la ubicación (opcional)
@@ -2717,6 +2802,8 @@ class ApiService {
     secuencialCuentaCorresponsal,
     secuencialCliente,
     valorApertura,
+    nombreCliente,
+    identificacionCliente,
     usuario,
     imei: customImei,
     latitud: customLatitud,
@@ -2738,6 +2825,8 @@ class ApiService {
         secuencialCuentaCorresponsal: secuencialCuentaCorresponsal || null,
         secuencialCliente: secuencialCliente || null,
         valorApertura: parseFloat(valorApertura),
+        nombreCliente: nombreCliente || null,
+        identificacionCliente: identificacionCliente || null,
         usuario: usuario || null,
         imei: customImei || imei,
         latitud: customLatitud !== undefined ? customLatitud : location.latitud,

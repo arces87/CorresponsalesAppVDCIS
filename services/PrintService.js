@@ -16,26 +16,45 @@ try {
   
   // Verificar si el módulo tiene sub-módulos (BluetoothManager, BluetoothEscposPrinter, BluetoothTscPrinter)
   if (moduleRoot && typeof moduleRoot === 'object') {
-    // Si tiene BluetoothManager, usarlo para list()
+    // Buscar BluetoothManager - puede estar como propiedad directa o con diferentes nombres
     if (moduleRoot.BluetoothManager) {
       BluetoothManager = moduleRoot.BluetoothManager;
-      console.log('✓ BluetoothManager encontrado');
+      console.log('✓ BluetoothManager encontrado como propiedad directa');
+    } else if (moduleRoot['Bluetooth Manager']) {
+      BluetoothManager = moduleRoot['Bluetooth Manager'];
+      console.log('✓ BluetoothManager encontrado como "Bluetooth Manager"');
     }
     
-    // Si tiene BluetoothEscposPrinter, usarlo para impresión
+    // Buscar BluetoothEscposPrinter
     if (moduleRoot.BluetoothEscposPrinter) {
       BluetoothEscposPrinter = moduleRoot.BluetoothEscposPrinter;
       console.log('✓ BluetoothEscposPrinter encontrado');
-    } else if (typeof moduleRoot.list === 'function') {
-      // Si el módulo raíz tiene list(), usarlo directamente
-      BluetoothEscposPrinter = moduleRoot;
+    } else if (moduleRoot['Bluetooth Escpos Printer']) {
+      BluetoothEscposPrinter = moduleRoot['Bluetooth Escpos Printer'];
+      console.log('✓ BluetoothEscposPrinter encontrado como "Bluetooth Escpos Printer"');
+    }
+    
+    // Si no encontramos los sub-módulos, verificar si el módulo raíz tiene métodos directos
+    if (!BluetoothManager && typeof moduleRoot.list === 'function') {
       BluetoothManager = moduleRoot;
-      console.log('✓ Módulo raíz tiene métodos directos');
-    } else {
-      // Intentar usar el módulo raíz como fallback
+      console.log('✓ Módulo raíz tiene método list() directo');
+    }
+    
+    if (!BluetoothEscposPrinter && typeof moduleRoot.connect === 'function') {
       BluetoothEscposPrinter = moduleRoot;
-      BluetoothManager = moduleRoot;
-      console.log('⚠ Usando módulo raíz como fallback');
+      console.log('✓ Módulo raíz tiene método connect() directo');
+    }
+    
+    // Si aún no tenemos BluetoothEscposPrinter, usar el módulo raíz como fallback
+    if (!BluetoothEscposPrinter) {
+      BluetoothEscposPrinter = moduleRoot;
+      console.log('⚠ Usando módulo raíz como fallback para BluetoothEscposPrinter');
+    }
+    
+    // Si aún no tenemos BluetoothManager, intentar usar BluetoothEscposPrinter
+    if (!BluetoothManager && BluetoothEscposPrinter) {
+      BluetoothManager = BluetoothEscposPrinter;
+      console.log('⚠ Usando BluetoothEscposPrinter como fallback para BluetoothManager');
     }
   } else {
     BluetoothEscposPrinter = moduleRoot;
@@ -45,21 +64,274 @@ try {
   // Verificar que al menos BluetoothManager tenga el método list()
   if (!BluetoothManager) {
     console.warn('BluetoothManager no está disponible');
-    errorCarga = 'El módulo se cargó pero BluetoothManager no está disponible';
-    BluetoothEscposPrinter = null;
-    BluetoothManager = null;
-  } else if (typeof BluetoothManager.list !== 'function') {
-    console.warn('BluetoothManager no tiene el método list()');
-    console.warn('Propiedades de BluetoothManager:', Object.keys(BluetoothManager || {}));
     const metodosDisponibles = Object.keys(bluetoothModule || {}).join(', ');
-    errorCarga = `El módulo no tiene el método list(). Métodos disponibles: ${metodosDisponibles}`;
+    errorCarga = `El módulo se cargó pero BluetoothManager no está disponible. Métodos disponibles: ${metodosDisponibles}`;
     BluetoothEscposPrinter = null;
     BluetoothManager = null;
   } else {
-    console.log('✓ Librería Bluetooth cargada correctamente');
-    console.log('Métodos de BluetoothManager:', Object.keys(BluetoothManager || {}));
-    if (BluetoothEscposPrinter) {
-      console.log('Métodos de BluetoothEscposPrinter:', Object.keys(BluetoothEscposPrinter || {}));
+    // Verificar si BluetoothManager tiene el método list()
+    // Puede ser que BluetoothManager sea un objeto que necesita ser instanciado o que tenga métodos diferentes
+    console.log('BluetoothManager tipo:', typeof BluetoothManager);
+    console.log('BluetoothManager propiedades:', Object.keys(BluetoothManager || {}));
+    
+    // Verificar si list() está disponible directamente
+    if (typeof BluetoothManager.list === 'function') {
+      console.log('✓ BluetoothManager.list() está disponible directamente');
+    } else {
+      // Buscar métodos alternativos que puedan ser list()
+      const managerMethods = Object.keys(BluetoothManager || {});
+      console.log('Métodos en BluetoothManager:', managerMethods);
+      
+      // Buscar métodos que puedan ser list() o scan()
+      // La librería react-native-bluetooth-escpos-printer usa scanDevices() que devuelve una Promise
+      const listMethod = managerMethods.find(m => {
+        const methodLower = m.toLowerCase();
+        return methodLower === 'list' || 
+               methodLower === 'scan' ||
+               methodLower === 'getdevices' ||
+               methodLower === 'getdevicelist' ||
+               methodLower === 'scandevices' ||
+               methodLower === 'scanDevices' ||
+               methodLower === 'getpaireddevices' ||
+               methodLower === 'getpaired';
+      });
+      
+      if (listMethod) {
+        console.log(`✓ Encontrado método similar a list(): ${listMethod}`);
+        // Crear un wrapper para usar el método encontrado
+        const originalMethod = BluetoothManager[listMethod];
+        
+        // Verificar que originalMethod existe
+        if (!originalMethod) {
+          console.error(`El método ${listMethod} no existe en BluetoothManager`);
+          const metodosDisponibles = Object.keys(bluetoothModule || {}).join(', ');
+          errorCarga = `El método ${listMethod} no existe en BluetoothManager. Métodos disponibles en el módulo raíz: ${metodosDisponibles}. Métodos en BluetoothManager: ${managerMethods.join(', ')}`;
+          BluetoothEscposPrinter = null;
+          BluetoothManager = null;
+        } else if (typeof originalMethod !== 'function') {
+          console.error(`El método ${listMethod} no es una función, tipo: ${typeof originalMethod}`);
+          const metodosDisponibles = Object.keys(bluetoothModule || {}).join(', ');
+          errorCarga = `El método ${listMethod} no es una función (tipo: ${typeof originalMethod}). Métodos disponibles en el módulo raíz: ${metodosDisponibles}. Métodos en BluetoothManager: ${managerMethods.join(', ')}`;
+          BluetoothEscposPrinter = null;
+          BluetoothManager = null;
+        } else {
+          // Guardar el nombre del método para usarlo dinámicamente
+          const methodName = listMethod;
+          
+          // Si el método es scanDevices(), puede que devuelva un objeto con paired y found
+          if (listMethod.toLowerCase() === 'scandevices' || listMethod.toLowerCase() === 'scanDevices') {
+            BluetoothManager.list = async () => {
+              try {
+                console.log('Dentro del wrapper, methodName:', methodName);
+                
+                // Verificar que BluetoothManager existe
+                if (!BluetoothManager) {
+                  throw new Error('BluetoothManager no está disponible');
+                }
+                
+                // Obtener el método directamente de BluetoothManager en tiempo de ejecución
+                console.log('Obteniendo método: BluetoothManager[' + methodName + ']');
+                const methodToCall = BluetoothManager[methodName];
+                console.log('methodToCall:', methodToCall);
+                console.log('methodToCall tipo:', typeof methodToCall);
+                
+                // Verificar que el método existe y es una función
+                if (!methodToCall) {
+                  console.error('ERROR: methodToCall es undefined o null');
+                  throw new Error(`El método ${methodName} no existe en BluetoothManager`);
+                }
+                
+                if (typeof methodToCall !== 'function') {
+                  console.error('ERROR: methodToCall no es una función');
+                  throw new Error(`El método ${methodName} no es una función (tipo: ${typeof methodToCall})`);
+                }
+                
+                // Llamar al método
+                console.log(`Llamando a ${methodName}...`);
+                let result;
+                try {
+                  // Intentar primero con .call()
+                  console.log('Intentando con .call()...');
+                  result = await methodToCall.call(BluetoothManager);
+                  console.log('Éxito con .call(), resultado:', result);
+                } catch (callError) {
+                  console.warn('Error con .call():', callError.message);
+                  console.warn(`Error al llamar ${methodName} con .call(), intentando directamente:`, callError.message);
+                  try {
+                    // Si falla con .call(), intentar llamarlo directamente
+                    console.log('Intentando directamente...');
+                    result = await methodToCall();
+                    console.log('Éxito directamente, resultado:', result);
+                  } catch (directError) {
+                    console.error('Error directamente:', directError.message);
+                    console.error(`Error al llamar ${methodName} directamente:`, directError);
+                    console.error('Stack trace:', directError.stack);
+                    throw directError;
+                  }
+                }
+                
+                // scanDevices puede devolver un string JSON o un objeto
+                if (typeof result === 'string') {
+                  try {
+                    const parsed = JSON.parse(result);
+                    // Combinar paired y found en un solo array
+                    const allDevices = [
+                      ...(parsed.paired || []),
+                      ...(parsed.found || [])
+                    ];
+                    return allDevices;
+                  } catch (parseError) {
+                    console.error('Error al parsear resultado de scanDevices:', parseError);
+                    // Si no se puede parsear, devolver array vacío
+                    return [];
+                  }
+                } else if (result && typeof result === 'object') {
+                  // Si es un objeto, combinar paired y found
+                  const allDevices = [
+                    ...(result.paired || []),
+                    ...(result.found || [])
+                  ];
+                  return allDevices;
+                }
+                return result || [];
+              } catch (error) {
+                console.error('Error en scanDevices:', error);
+                console.error('Stack trace:', error.stack);
+                throw error;
+              }
+            };
+          } else {
+            // Para otros métodos, crear un wrapper que obtenga el método dinámicamente
+            BluetoothManager.list = async function() {
+              try {
+                console.log('Dentro del wrapper (else), methodName:', methodName);
+                
+                // Verificar que BluetoothManager existe
+                if (!BluetoothManager) {
+                  throw new Error('BluetoothManager no está disponible');
+                }
+                
+                // Obtener el método directamente de BluetoothManager en tiempo de ejecución
+                console.log('Obteniendo método: BluetoothManager[' + methodName + ']');
+                const methodToCall = BluetoothManager[methodName];
+                console.log('methodToCall:', methodToCall);
+                console.log('methodToCall tipo:', typeof methodToCall);
+                
+                // Verificar que el método existe y es una función
+                if (!methodToCall) {
+                  console.error('ERROR: methodToCall es undefined o null');
+                  throw new Error(`El método ${methodName} no existe en BluetoothManager`);
+                }
+                
+                if (typeof methodToCall !== 'function') {
+                  console.error('ERROR: methodToCall no es una función');
+                  throw new Error(`El método ${methodName} no es una función (tipo: ${typeof methodToCall})`);
+                }
+                
+                // Llamar al método con el contexto correcto
+                console.log(`Llamando a ${methodName}...`);
+                let result;
+                try {
+                  // Intentar primero con .call()
+                  console.log('Intentando con .call()...');
+                  result = await methodToCall.call(BluetoothManager);
+                  console.log('Éxito con .call(), resultado tipo:', typeof result);
+                } catch (callError) {
+                  console.warn('Error con .call():', callError.message);
+                  console.warn(`Error al llamar ${methodName} con .call(), intentando directamente:`, callError.message);
+                  try {
+                    // Si falla con .call(), intentar llamarlo directamente
+                    console.log('Intentando directamente...');
+                    result = await methodToCall();
+                    console.log('Éxito directamente, resultado tipo:', typeof result);
+                  } catch (directError) {
+                    console.error('Error directamente:', directError.message);
+                    console.error(`Error al llamar ${methodName} directamente:`, directError);
+                    console.error('Stack trace:', directError.stack);
+                    throw directError;
+                  }
+                }
+                
+                // Procesar el resultado: puede ser un string JSON o un objeto con paired/found
+                if (typeof result === 'string') {
+                  try {
+                    console.log('Resultado es string, parseando JSON...');
+                    const parsed = JSON.parse(result);
+                    console.log('JSON parseado:', parsed);
+                    // Combinar paired y found en un solo array
+                    const allDevices = [
+                      ...(parsed.paired || []),
+                      ...(parsed.found || [])
+                    ];
+                    console.log('Dispositivos combinados:', allDevices);
+                    return allDevices;
+                  } catch (parseError) {
+                    console.error('Error al parsear resultado:', parseError);
+                    // Si no se puede parsear, intentar devolver como array si es posible
+                    if (result.trim().startsWith('[')) {
+                      try {
+                        return JSON.parse(result);
+                      } catch (e) {
+                        console.error('No se pudo parsear como array:', e);
+                        return [];
+                      }
+                    }
+                    return [];
+                  }
+                } else if (result && typeof result === 'object') {
+                  console.log('Resultado es objeto, procesando...');
+                  // Si es un objeto, verificar si tiene paired o found
+                  if (result.paired || result.found) {
+                    // Combinar paired y found en un solo array
+                    const allDevices = [
+                      ...(result.paired || []),
+                      ...(result.found || [])
+                    ];
+                    console.log('Dispositivos combinados:', allDevices);
+                    return allDevices;
+                  }
+                  // Si es un array, devolverlo directamente
+                  if (Array.isArray(result)) {
+                    console.log('Resultado es array, devolviendo directamente');
+                    return result;
+                  }
+                  // Si es un objeto pero no tiene paired/found, intentar convertirlo a array
+                  if (result.length !== undefined) {
+                    console.log('Resultado tiene length, convirtiendo a array');
+                    return Array.from(result);
+                  }
+                  // Si no se puede procesar, devolver array vacío
+                  console.warn('No se pudo procesar el resultado, devolviendo array vacío');
+                  return [];
+                }
+                
+                // Si no es string ni objeto, devolver array vacío
+                console.warn('Resultado no es string ni objeto, devolviendo array vacío');
+                return [];
+              } catch (error) {
+                console.error(`Error al llamar ${methodName}:`, error);
+                console.error('Stack trace:', error.stack);
+                throw error;
+              }
+            };
+          }
+        }
+      } else {
+        // Si no encontramos el método, mostrar error con información detallada
+        const metodosDisponibles = Object.keys(bluetoothModule || {}).join(', ');
+        errorCarga = `El módulo no tiene el método list(). Métodos disponibles en el módulo raíz: ${metodosDisponibles}. Métodos en BluetoothManager: ${managerMethods.join(', ')}`;
+        BluetoothEscposPrinter = null;
+        BluetoothManager = null;
+      }
+    }
+    
+    // Si llegamos aquí y BluetoothManager es válido, la carga fue exitosa
+    if (BluetoothManager && typeof BluetoothManager.list === 'function') {
+      console.log('✓ Librería Bluetooth cargada correctamente');
+      console.log('Métodos de BluetoothManager:', Object.keys(BluetoothManager || {}));
+      if (BluetoothEscposPrinter) {
+        console.log('Métodos de BluetoothEscposPrinter:', Object.keys(BluetoothEscposPrinter || {}));
+      }
     }
   }
 } catch (error) {
@@ -96,11 +368,18 @@ class PrintService {
     speed: 90, // mm/s
   };
 
+  /** Datos estáticos del comprobante (institución, RUC, atención al socio) */
+  static COMPROBANTE_DATOS_ESTATICOS = {
+    nombreEmpresa: 'COOPAC LOS ANDES DE COTARUSI',
+    ruc: '20526918429',    
+    atencionAlSocio: '+51945347147',
+  };
+
   // Almacenar el dispositivo conectado
   static dispositivoConectado = null;
   /**
    * Busca dispositivos Bluetooth disponibles
-   * @returns {Promise<Array>} Lista de dispositivos Bluetooth disponibles
+   * @returns {Promise<Array>} Lista de todos los dispositivos Bluetooth disponibles (sin filtrar)
    */
   static async buscarDispositivosBluetooth() {
     try {
@@ -114,24 +393,64 @@ class PrintService {
         throw new Error('La librería de impresión Bluetooth no está disponible. Por favor, reconstruya la aplicación.');
       }
 
-      // Buscar dispositivos Bluetooth emparejados usando BluetoothManager
-      const dispositivos = await BluetoothManager.list();
-      
-      console.log('Dispositivos encontrados:', dispositivos);
-      
-      // Filtrar dispositivos que puedan ser impresoras (buscar nombres comunes)
-      const impresoras = dispositivos.filter(device => {
-        const nombre = (device.name || '').toUpperCase();
-        return nombre.includes('ADV') || 
-               nombre.includes('PRINTER') || 
-               nombre.includes('PRINT') ||
-               nombre.includes('POS') ||
-               nombre.includes('THERMAL');
-      });
+      // Verificar que list() esté disponible y sea una función antes de llamarlo
+      if (!BluetoothManager.list) {
+        throw new Error('El método list() no está disponible en BluetoothManager. Por favor, verifique que la librería esté correctamente instalada.');
+      }
 
-      return impresoras.length > 0 ? impresoras : dispositivos;
+      if (typeof BluetoothManager.list !== 'function') {
+        console.error('BluetoothManager.list no es una función:', typeof BluetoothManager.list);
+        console.error('BluetoothManager:', BluetoothManager);
+        console.error('Propiedades de BluetoothManager:', Object.keys(BluetoothManager || {}));
+        throw new Error(`El método list() no es una función (tipo: ${typeof BluetoothManager.list}). Por favor, verifique que la librería esté correctamente instalada.`);
+      }
+
+      // Buscar dispositivos Bluetooth emparejados usando BluetoothManager
+      console.log('Llamando a BluetoothManager.list()...');
+      console.log('BluetoothManager.list tipo:', typeof BluetoothManager.list);
+      
+      let dispositivos;
+      try {
+        dispositivos = await BluetoothManager.list();
+        console.log('Dispositivos encontrados:', dispositivos);
+        console.log('Tipo de dispositivos:', typeof dispositivos);
+        console.log('¿Es array?:', Array.isArray(dispositivos));
+      } catch (listError) {
+        console.error('Error al llamar BluetoothManager.list():', listError);
+        console.error('Stack trace:', listError.stack);
+        throw listError;
+      }
+      
+      // Retornar todos los dispositivos sin filtrar, asegurándose de que sea un array
+      if (!dispositivos) {
+        console.warn('BluetoothManager.list() devolvió null o undefined');
+        return [];
+      }
+      
+      if (!Array.isArray(dispositivos)) {
+        console.warn('Los dispositivos no son un array, tipo:', typeof dispositivos);
+        console.warn('Contenido:', dispositivos);
+        // Intentar convertir a array si es posible
+        if (typeof dispositivos === 'object' && dispositivos !== null) {
+          // Si es un objeto con propiedades, intentar extraer un array
+          if (dispositivos.paired && Array.isArray(dispositivos.paired)) {
+            return dispositivos.paired;
+          }
+          if (dispositivos.found && Array.isArray(dispositivos.found)) {
+            return dispositivos.found;
+          }
+          // Si tiene propiedades numéricas, podría ser un array-like
+          if (dispositivos.length !== undefined) {
+            return Array.from(dispositivos);
+          }
+        }
+        return [];
+      }
+      
+      return dispositivos;
     } catch (error) {
       console.error('Error al buscar dispositivos Bluetooth:', error);
+      console.error('Stack trace:', error.stack);
       throw new Error(`No se pudo buscar dispositivos Bluetooth: ${error.message}`);
     }
   }
@@ -158,18 +477,152 @@ class PrintService {
         await this.desconectarImpresora();
       }
 
-      // Conectar al dispositivo
-      await BluetoothEscposPrinter.connect(deviceId);
+      // Resolver el método connect: en algunas versiones está en BluetoothEscposPrinter, en otras en BluetoothManager
+      const connectFn = (typeof BluetoothEscposPrinter?.connect === 'function' && BluetoothEscposPrinter.connect)
+        ? BluetoothEscposPrinter.connect.bind(BluetoothEscposPrinter)
+        : (typeof BluetoothManager?.connect === 'function' && BluetoothManager.connect)
+          ? BluetoothManager.connect.bind(BluetoothManager)
+          : null;
+
+      if (!connectFn) {
+        const escposMethods = Object.keys(BluetoothEscposPrinter || {}).join(', ') || 'ninguno';
+        const managerMethods = Object.keys(BluetoothManager || {}).join(', ') || 'ninguno';
+        const detail = {
+          mensaje: `No se encontró el método connect(). BluetoothEscposPrinter: [${escposMethods}]. BluetoothManager: [${managerMethods}].`,
+          deviceId,
+          message: 'undefined is not a function',
+          code: 'CONNECT_NOT_FOUND',
+          nativeErrorMessage: null,
+          stack: null,
+          escposMethods,
+          managerMethods,
+        };
+        console.error('Método connect no disponible. BluetoothEscposPrinter:', escposMethods, 'BluetoothManager:', managerMethods);
+        const err = new Error(detail.mensaje);
+        err.detalleConexion = detail;
+        this.dispositivoConectado = null;
+        throw err;
+      }
+
+      // Conectar al dispositivo (intentar dirección normalizada si la primera falla)
+      let lastError = null;
+      const direccionesAProbar = [deviceId];
+      const normalizada = PrintService._normalizarDireccionMac(deviceId);
+      if (normalizada && normalizada !== deviceId) {
+        direccionesAProbar.push(normalizada);
+      }
+
+      for (const direccion of direccionesAProbar) {
+        try {
+          await connectFn(direccion);
+          lastError = null;
+          if (direccion !== deviceId) {
+            console.log('Conexión exitosa con dirección normalizada:', direccion);
+          }
+          break;
+        } catch (connectError) {
+          lastError = connectError;
+          const msg = connectError?.message ?? String(connectError);
+          const code = connectError?.code;
+          const isRetryable = code === 'EUNSPECIFIED' || /Unable to connect|Unable to conect/i.test(msg);
+          if (direccion === deviceId && direccionesAProbar.length > 1 && isRetryable) {
+            console.warn('Primera conexión falló, intentando con dirección normalizada...');
+            continue;
+          }
+          break;
+        }
+      }
+
+      if (lastError) {
+        const detail = PrintService._serializarErrorConexion(lastError, deviceId);
+        console.error('Error nativo al conectar a la impresora:', detail);
+        this.dispositivoConectado = null;
+        const err = new Error(detail.mensaje);
+        err.detalleConexion = detail;
+        throw err;
+      }
       
       this.dispositivoConectado = deviceId;
       console.log('Conectado exitosamente a la impresora:', deviceId);
       
       return true;
     } catch (error) {
+      if (error.detalleConexion) {
+        console.error('Error al conectar a la impresora (detalle):', error.detalleConexion);
+        this.dispositivoConectado = null;
+        throw error;
+      }
       console.error('Error al conectar a la impresora:', error);
       this.dispositivoConectado = null;
-      throw new Error(`No se pudo conectar a la impresora: ${error.message}`);
+      const detail = PrintService._serializarErrorConexion(error, deviceId);
+      const err = new Error(detail.mensaje);
+      err.detalleConexion = detail;
+      throw err;
     }
+  }
+
+  /**
+   * Serializa un error de conexión para mostrar diagnóstico completo en logs.
+   * Añade sugerencias cuando el error es EUNSPECIFIED / "Unable to connect device".
+   * @private
+   */
+  static _serializarErrorConexion(error, deviceId) {
+    const msg = error?.message ?? String(error);
+    const code = error?.code;
+    const partes = [];
+    partes.push(`Mensaje: ${msg}`);
+    if (code !== undefined && code !== null) {
+      partes.push(`Código: ${code}`);
+    }
+    if (error?.nativeErrorMessage) {
+      partes.push(`Nativo (Android): ${error.nativeErrorMessage}`);
+    }
+    if (error?.userInfo?.message) {
+      partes.push(`userInfo.message: ${error.userInfo.message}`);
+    }
+    if (error?.stack) {
+      partes.push(`Stack: ${error.stack}`);
+    }
+
+    const isUnableToConnect = code === 'EUNSPECIFIED' || /Unable to connect|Unable to conect/i.test(msg);
+    let sugerencias = null;
+    if (isUnableToConnect) {
+      sugerencias = [
+        'Verifique que la impresora esté encendida y cerca del dispositivo.',
+        'En Ajustes > Bluetooth, confirme que la impresora aparece como emparejada.',
+        'Si aparece "Emparejado" pero no "Conectado", toque la impresora para conectar primero.',
+        'Pruebe olvidar el dispositivo en Bluetooth y emparejarlo de nuevo.',
+        'Algunas impresoras requieren estar en modo "visible" o "disponible" al emparejar.',
+        '— Si usa un emulador (ej. Bluetooth Printer Simulator): abra la app emuladora y póngala en modo "Servidor", "Esperando conexión" o "Listen" antes de tocar Conectar aquí.',
+        '— Las apps que emulan impresora a veces usan un perfil Bluetooth distinto al SPP; esta app usa perfil SPP. Si solo prueba con emulador, pruebe con una impresora física para descartar.',
+      ];
+      partes.push('Sugerencias:', ...sugerencias);
+    }
+
+    const mensaje = `No se pudo conectar a la impresora.\n${partes.join('\n')}`;
+    return {
+      mensaje,
+      deviceId,
+      message: msg,
+      code,
+      nativeErrorMessage: error?.nativeErrorMessage,
+      stack: error?.stack,
+      sugerencias,
+    };
+  }
+
+  /**
+   * Normaliza una dirección Bluetooth a formato con dos puntos (XX:XX:XX:XX:XX:XX).
+   * Si ya tiene dos puntos o no son 12 caracteres hex, devuelve el valor sin cambios.
+   * @private
+   */
+  static _normalizarDireccionMac(address) {
+    if (!address || typeof address !== 'string') return address;
+    const limpio = address.replace(/[:-]/g, '').toUpperCase();
+    if (/^[0-9A-F]{12}$/.test(limpio)) {
+      return [limpio.slice(0, 2), limpio.slice(2, 4), limpio.slice(4, 6), limpio.slice(6, 8), limpio.slice(8, 10), limpio.slice(10, 12)].join(':');
+    }
+    return address;
   }
 
   /**
@@ -182,13 +635,20 @@ class PrintService {
         return true;
       }
 
-      if (!BluetoothEscposPrinter) {
+      const disconnectFn = (typeof BluetoothEscposPrinter?.disconnect === 'function' && BluetoothEscposPrinter.disconnect)
+        ? BluetoothEscposPrinter.disconnect.bind(BluetoothEscposPrinter)
+        : (typeof BluetoothManager?.disconnect === 'function' && BluetoothManager.disconnect)
+          ? BluetoothManager.disconnect.bind(BluetoothManager)
+          : null;
+
+      if (!disconnectFn) {
+        console.warn('Método disconnect no disponible, limpiando estado.');
         this.dispositivoConectado = null;
         return true;
       }
 
       console.log('Desconectando impresora...');
-      await BluetoothEscposPrinter.disconnect();
+      await disconnectFn();
       this.dispositivoConectado = null;
       console.log('Desconectado exitosamente');
       return true;
@@ -217,75 +677,79 @@ class PrintService {
    * @param {number} comprobante.total - Total
    * @param {string} [comprobante.tipo] - Tipo de transacción (opcional)
    * @param {string} [comprobante.cliente] - Nombre del cliente (opcional)
+   * @param {string} [comprobante.deviceId] - ID del dispositivo Bluetooth a usar (opcional, si no se proporciona se intentará seleccionar automáticamente)
    * @returns {Promise<boolean>} true si la impresión fue exitosa
+   * @throws {Error} Si hay múltiples dispositivos y no se proporciona deviceId, el error incluirá la lista de dispositivos en error.dispositivos
    */
   static async imprimirComprobante(comprobante) {
     try {
-      const {
-        fecha,
-        referencia,
-        monto,
-        comision,
-        total,
-        tipo = 'Transacción',
-        cliente = ''
-      } = comprobante;
+      const datos = {
+        fecha: comprobante.fecha,
+        referencia: comprobante.referencia,
+        monto: comprobante.monto,
+        comision: comprobante.comision ?? 0,
+        total: comprobante.total,
+        tipo: comprobante.tipo || 'Transacción',
+        cliente: comprobante.cliente || '',
+        nombreInstitucion: comprobante.nombreInstitucion || '',
+        ruc: comprobante.ruc || '',
+        numeroCuenta: comprobante.numeroCuenta || '',
+        codigoOperacion: comprobante.codigoOperacion || comprobante.referencia,
+        observacion: comprobante.observacion || '',
+        negocio: comprobante.negocio || '',
+        usuario: comprobante.usuario || '',
+        identificacionCliente: comprobante.identificacionCliente || '',
+        atencionAlSocio: comprobante.atencionAlSocio || ''
+      };
 
       // Generar comandos ESC/POS para la impresora ADV7011
-      const comandos = this.generarComandosESCPOS({
-        fecha,
-        referencia,
-        monto,
-        comision,
-        total,
-        tipo,
-        cliente
-      });
+      const comandos = this.generarComandosESCPOS(datos);
 
       // Formatear también para visualización (texto plano)
-      const contenido = this.formatearComprobante({
-        fecha,
-        referencia,
-        monto,
-        comision,
-        total,
-        tipo,
-        cliente
-      });
+      const contenido = this.formatearComprobante(datos);
 
       console.log('Comprobante formateado para ADV7011:', contenido);
       console.log('Comandos ESC/POS generados:', comandos.length, 'comandos');
 
       // Verificar si hay una impresora conectada
       if (!this.dispositivoConectado) {
-        // Buscar y conectar a una impresora automáticamente
-        const dispositivos = await this.buscarDispositivosBluetooth();
-        
-        if (dispositivos.length === 0) {
-          throw new Error(
-            'No se encontraron dispositivos Bluetooth disponibles.\n\n' +
-            'Por favor:\n' +
-            '1. Active Bluetooth en su dispositivo\n' +
-            '2. Asegúrese de que la impresora ADV7011 esté encendida\n' +
-            '3. Empareje la impresora con su dispositivo\n' +
-            '4. Intente nuevamente'
-          );
-        }
+        // Si se proporciona un deviceId específico, usarlo
+        if (comprobante.deviceId) {
+          try {
+            await this.conectarImpresora(comprobante.deviceId);
+          } catch (error) {
+            throw new Error(
+              `No se pudo conectar al dispositivo especificado.\n\n` +
+              `Error: ${error.message}\n\n` +
+              'Por favor, verifique que el dispositivo esté encendido y emparejado.'
+            );
+          }
+        } else {
+          // Pequeña pausa para no invocar el módulo nativo Bluetooth en el mismo ciclo que el toque (evita cierres en algunos dispositivos)
+          await new Promise((r) => setTimeout(r, 300));
+          // Buscar dispositivos disponibles
+          const dispositivos = await this.buscarDispositivosBluetooth();
+          
+          if (dispositivos.length === 0) {
+            throw new Error(
+              'No se encontraron dispositivos Bluetooth disponibles.\n\n' +
+              'Por favor:\n' +
+              '1. Active Bluetooth en su dispositivo\n' +
+              '2. Asegúrese de que la impresora esté encendida\n' +
+              '3. Empareje la impresora con su dispositivo\n' +
+              '4. Intente nuevamente'
+            );
+          }
 
-        // Intentar conectar a la primera impresora encontrada
-        // Si hay varias, preferir una que contenga "ADV" en el nombre
-        let impresoraSeleccionada = dispositivos.find(d => 
-          (d.name || '').toUpperCase().includes('ADV')
-        ) || dispositivos[0];
-
-        try {
-          await this.conectarImpresora(impresoraSeleccionada.address || impresoraSeleccionada.id);
-        } catch (error) {
-          throw new Error(
-            `No se pudo conectar a la impresora ${impresoraSeleccionada.name || 'seleccionada'}.\n\n` +
-            `Error: ${error.message}\n\n` +
-            'Por favor, verifique que la impresora esté encendida y emparejada.'
-          );
+          // Siempre mostrar selector (1 o más dispositivos), igual que en ProbarImpresionScreen.
+          // La conexión se hace solo al seleccionar el dispositivo, evitando cierre de app al conectar dentro de esta misma llamada.
+          const mensaje = dispositivos.length === 1
+            ? 'Se encontró 1 dispositivo. Selecciónelo para continuar.'
+            : `Se encontraron ${dispositivos.length} dispositivos Bluetooth disponibles. Por favor, seleccione uno.`;
+          const error = new Error(mensaje);
+          error.dispositivos = dispositivos;
+          error.codigo = 'MULTIPLES_DISPOSITIVOS';
+          throw error;
         }
       }
 
@@ -348,7 +812,7 @@ class PrintService {
   }
 
   /**
-   * Genera comandos ESC/POS para la impresora térmica ADV7011
+   * Genera comandos ESC/POS para la impresora (formato comprobante según imagen: institución, tipo, monto, detalle, pie).
    * @param {Object} datos - Datos del comprobante
    * @returns {Array} Array de comandos ESC/POS
    */
@@ -360,77 +824,71 @@ class PrintService {
       comision,
       total,
       tipo,
-      cliente
+      cliente,
+      numeroCuenta,
+      codigoOperacion,
+      observacion,
+      usuario,
+      negocio,
+      identificacionCliente
     } = datos;
 
     const comandos = [];
     const width = this.PRINTER_CONFIG.width;
+    const estaticos = this.COMPROBANTE_DATOS_ESTATICOS;
+    const codigoOp = codigoOperacion || referencia;
 
     // Inicializar impresora (ESC @)
     comandos.push('\x1B\x40'); // Reset printer
-    
-    // Centrar texto (ESC a 1)
     comandos.push('\x1B\x61\x01'); // Center align
-    
-    // Texto grande para título (GS ! 0x11 = doble altura y ancho)
-    comandos.push('\x1D\x21\x11'); // Double width and height
-    comandos.push('COMPROBANTE\n');
-    comandos.push('DE TRANSACCION\n');
-    
-    // Reset formato
-    comandos.push('\x1D\x21\x00'); // Normal size
-    comandos.push('\x1B\x61\x00'); // Left align
-    comandos.push('────────────────────────────\n');
-    
-    // Información de la transacción
-    comandos.push(`Tipo: ${tipo}\n`);
-    if (cliente) {
-      comandos.push(`Cliente: ${this.truncarTexto(cliente, width - 10)}\n`);
+
+    // Encabezado (solo lo que muestra la imagen)
+    if (estaticos.nombreEmpresa) {
+      comandos.push('\x1D\x21\x01'); // Double height
+      comandos.push(this.centrarTexto(estaticos.nombreEmpresa.toUpperCase(), width) + '\n');
+      comandos.push('\x1D\x21\x00');
     }
-    comandos.push(`Fecha: ${fecha}\n`);
-    comandos.push(`N°: ${referencia}\n`);
-    comandos.push('────────────────────────────\n');
-    
-    // Detalles con formato de tabla
-    comandos.push('Detalle          Valor\n');
-    comandos.push('────────────────────────────\n');
-    
-    // Monto
-    const montoStr = `$${parseFloat(monto).toFixed(2)}`;
-    comandos.push(`Monto${this.espacios(width - 10 - montoStr.length)}${montoStr}\n`);
-    
-    // Comisión
-    const comisionStr = `$${parseFloat(comision).toFixed(2)}`;
-    comandos.push(`Comision${this.espacios(width - 10 - comisionStr.length)}${comisionStr}\n`);
-    
-    comandos.push('────────────────────────────\n');
-    
-    // Total en negrita
-    comandos.push('\x1B\x45\x01'); // Bold on
-    const totalStr = `$${parseFloat(total).toFixed(2)}`;
-    comandos.push(`TOTAL${this.espacios(width - 6 - totalStr.length)}${totalStr}\n`);
-    comandos.push('\x1B\x45\x00'); // Bold off
-    comandos.push('────────────────────────────\n\n');
-    
-    // Pie de página
-    comandos.push('\x1B\x61\x01'); // Center align
-    comandos.push('Este comprobante es válido\n');
-    comandos.push('como constancia de la\n');
-    comandos.push('transacción realizada.\n\n');
-    
+    comandos.push(this.centrarTexto('REGULADO Y SUPERVISADO POR LA S.B.S', width) + '\n');
+    if (estaticos.ruc) comandos.push(`RUC:${estaticos.ruc}\n`);    
+    comandos.push(this.centrarTexto('Operación realizada en su Asesor Virtual', width) + '\n\n');
     comandos.push('\x1B\x61\x00'); // Left align
     comandos.push('────────────────────────────\n');
-    comandos.push(`Fecha imp: ${new Date().toLocaleString('es-EC')}\n`);
-    comandos.push('────────────────────────────\n\n');
-    
-    // Cortar papel (GS V 0)
-    comandos.push('\x1D\x56\x00'); // Cut paper
-    
+    comandos.push('\x1B\x61\x01');
+    comandos.push(this.centrarTexto((tipo || 'DEPOSITO EN CUENTA').toUpperCase(), width) + '\n');
+    comandos.push('\x1D\x21\x11'); // Double size amount
+    comandos.push(this.centrarTexto(`S/ ${parseFloat(monto).toFixed(2)}`, width) + '\n');
+    comandos.push('\x1D\x21\x00');
+    comandos.push('\x1B\x61\x00');
+    comandos.push('────────────────────────────\n');
+    const fechaHora = this.normalizarFechaHora(fecha);
+    comandos.push(`Fecha y Hora: ${fechaHora}\n`);
+    if (identificacionCliente != null && String(identificacionCliente).trim() !== '') {
+      comandos.push(`Identificación Socio: ${String(identificacionCliente).trim()}\n`);
+    }
+    if (cliente != null && String(cliente).trim() !== '') {
+      comandos.push(`Nombre del Socio: ${this.truncarTexto(String(cliente).trim(), width - 20)}\n`);
+    }
+    if (numeroCuenta != null && String(numeroCuenta).trim() !== '') {
+      comandos.push(`N° de Cuenta: ${this.enmascararNumeroCuenta(numeroCuenta)}\n`);
+    }
+    comandos.push(`Código Operación: ${codigoOp || 'N/A'}\n`);
+    if (observacion != null && String(observacion).trim() !== '') {
+      comandos.push(`Observación: :${observacion}\n`);
+    }
+    comandos.push('────────────────────────────\n');
+    if (negocio != null && String(negocio).trim() !== '') {
+      comandos.push(`NEGOCIO: ${String(negocio).trim()}\n`);
+    }
+    if (usuario != null && String(usuario).trim() !== '') {
+      comandos.push(`USUARIO: ${String(usuario).trim()}\n`);
+    }
+    if (estaticos.atencionAlSocio) comandos.push(`ATENCION AL SOCIO: ${estaticos.atencionAlSocio}\n`);
+    comandos.push('\x1D\x56\x00'); // Cortar papel
     return comandos;
   }
 
   /**
-   * Formatea el contenido del comprobante para impresión (versión texto plano)
+   * Formatea el contenido del comprobante para impresión (versión texto plano, mismo formato que la imagen).
    * @param {Object} datos - Datos del comprobante
    * @returns {string} Contenido formateado
    */
@@ -442,50 +900,51 @@ class PrintService {
       comision,
       total,
       tipo,
-      cliente
+      cliente,
+      numeroCuenta,
+      codigoOperacion,
+      observacion,
+      usuario,
+      negocio,
+      identificacionCliente
     } = datos;
 
     const width = this.PRINTER_CONFIG.width;
+    const estaticos = this.COMPROBANTE_DATOS_ESTATICOS;
+    const codigoOp = codigoOperacion || referencia;
     let contenido = '';
-    
-    // Encabezado centrado
-    contenido += this.centrarTexto('COMPROBANTE', width) + '\n';
-    contenido += this.centrarTexto('DE TRANSACCION', width) + '\n';
-    contenido += '────────────────────────────\n';
-    
-    // Información de la transacción
-    contenido += `Tipo: ${tipo}\n`;
-    if (cliente) {
-      contenido += `Cliente: ${this.truncarTexto(cliente, width - 10)}\n`;
-    }
-    contenido += `Fecha: ${fecha}\n`;
-    contenido += `N°: ${referencia}\n`;
-    contenido += '────────────────────────────\n';
-    
-    // Detalles
-    contenido += 'Detalle          Valor\n';
-    contenido += '────────────────────────────\n';
-    
-    const montoStr = `$${parseFloat(monto).toFixed(2)}`;
-    contenido += `Monto${this.espacios(width - 10 - montoStr.length)}${montoStr}\n`;
-    
-    const comisionStr = `$${parseFloat(comision).toFixed(2)}`;
-    contenido += `Comision${this.espacios(width - 10 - comisionStr.length)}${comisionStr}\n`;
-    
-    contenido += '────────────────────────────\n';
-    
-    const totalStr = `$${parseFloat(total).toFixed(2)}`;
-    contenido += `TOTAL${this.espacios(width - 6 - totalStr.length)}${totalStr}\n`;
-    contenido += '────────────────────────────\n\n';
-    
-    // Pie de página
-    contenido += this.centrarTexto('Este comprobante es válido', width) + '\n';
-    contenido += this.centrarTexto('como constancia de la', width) + '\n';
-    contenido += this.centrarTexto('transacción realizada.', width) + '\n\n';
-    contenido += '────────────────────────────\n';
-    contenido += `Fecha imp: ${new Date().toLocaleString('es-EC')}\n`;
-    contenido += '────────────────────────────\n';
 
+    if (estaticos.nombreEmpresa) contenido += this.centrarTexto(estaticos.nombreEmpresa.toUpperCase(), width) + '\n';
+    if (estaticos.ruc) contenido += `RUC:${estaticos.ruc}\n`;
+    contenido += this.centrarTexto('REGULADO Y SUPERVISADO POR LA S.B.S', width) + '\n';
+    contenido += this.centrarTexto('Operación realizada en su Asesor Virtual', width) + '\n\n';
+    contenido += '────────────────────────────\n';
+    contenido += this.centrarTexto((tipo || 'DEPOSITO EN CUENTA').toUpperCase(), width) + '\n';
+    contenido += this.centrarTexto(`S/ ${parseFloat(monto).toFixed(2)}`, width) + '\n';
+    contenido += '────────────────────────────\n';
+    const fechaHora = this.normalizarFechaHora(fecha);
+    contenido += `Fecha y Hora: ${fechaHora}\n`;
+    if (identificacionCliente != null && String(identificacionCliente).trim() !== '') {
+      contenido += `Identificación Socio: ${String(identificacionCliente).trim()}\n`;
+    }
+    if (cliente != null && String(cliente).trim() !== '') {
+      contenido += `Nombre del Socio: ${this.truncarTexto(String(cliente).trim(), width - 20)}\n`;
+    }
+    if (numeroCuenta != null && String(numeroCuenta).trim() !== '') {
+      contenido += `N° de Cuenta: ${this.enmascararNumeroCuenta(numeroCuenta)}\n`;
+    }
+    contenido += `Código Operación: ${codigoOp || 'N/A'}\n`;
+    if (observacion != null && String(observacion).trim() !== '') {
+      contenido += `Observación: :${observacion}\n`;
+    }
+    contenido += '────────────────────────────\n';
+    if (negocio != null && String(negocio).trim() !== '') {
+      contenido += `NEGOCIO: ${String(negocio).trim()}\n`;
+    }
+    if (usuario != null && String(usuario).trim() !== '') {
+      contenido += `USUARIO: ${String(usuario).trim()}\n`;
+    }
+    if (estaticos.atencionAlSocio) contenido += `ATENCION AL SOCIO: ${estaticos.atencionAlSocio}\n`;
     return contenido;
   }
 
@@ -519,6 +978,37 @@ class PrintService {
     if (!texto) return '';
     if (texto.length <= maxLength) return texto;
     return texto.substring(0, maxLength - 3) + '...';
+  }
+
+  /**
+   * Enmascara número de cuenta: primeros 7 + ***** + últimos 3 (ej. 1630071*****917)
+   * @param {string} numeroCuenta - Número de cuenta
+   * @returns {string} Cuenta enmascarada
+   */
+  static enmascararNumeroCuenta(numeroCuenta) {
+    if (!numeroCuenta || typeof numeroCuenta !== 'string') return numeroCuenta || '';
+    const s = String(numeroCuenta).trim();
+    if (s.length <= 10) return s;
+    return s.substring(0, 7) + '*****' + s.substring(s.length - 3);
+  }
+
+  /**
+   * Normaliza fecha para comprobante: si viene solo fecha (sin hora), añade la hora actual.
+   * @param {string} [fecha] - Fecha desde el API (puede ser solo fecha)
+   * @returns {string} Fecha y hora en formato locale (es-EC)
+   */
+  static normalizarFechaHora(fecha) {
+    const ahora = new Date();
+    const conHora = () => ahora.toLocaleString('es-EC', { dateStyle: 'short', timeStyle: 'medium' });
+    if (!fecha) return conHora();
+    const s = String(fecha).trim();
+    if (!s) return conHora();
+    if (/:\d{2}/.test(s)) return s;
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleString('es-EC', { dateStyle: 'short', timeStyle: 'medium' });
+    }
+    return s + ' ' + ahora.toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   }
 
   /**

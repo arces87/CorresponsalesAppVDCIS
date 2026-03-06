@@ -23,9 +23,7 @@ export default function PagoServicioScreen() {
   const [valorTransaccion, setValorTransaccion] = useState('');
   const [menuLabel, setMenuLabel] = useState('');
   const [menuAccion, setMenuAccion] = useState('');
-  const [categoriasServicios, setCategoriasServicios] = useState([]);
-  const [cargandoCategorias, setCargandoCategorias] = useState(false);
-  const [categoriaSeleccionada, setCategoriaSeleccionada] = useState('');
+  const [textoBusquedaServicio, setTextoBusquedaServicio] = useState('');
   const [servicios, setServicios] = useState([]);
   const [cargandoServicios, setCargandoServicios] = useState(false);
   const [servicioSeleccionado, setServicioSeleccionado] = useState('');
@@ -85,7 +83,7 @@ export default function PagoServicioScreen() {
       );
       const proveedorServicio = servicioObj?.nombre || null;
       
-      const nombreTitular = correoTitular || 'N/A';
+      const nombreTitular = reciboData?.titularCuenta || null;
 
       setUserData(prevData => {
         return {
@@ -98,7 +96,7 @@ export default function PagoServicioScreen() {
           identificaciontitular: identificacionTitular || null,
           correotitular: correoTitular || null,
           identificacioncliente: identificacionTitular || null,
-          nombrecliente: nombreTitular
+          nombrecliente: nombreTitular || null
         };
       });
 
@@ -235,8 +233,8 @@ export default function PagoServicioScreen() {
       { key: 'numeroCuenta', label: 'Número de Cuenta' },
       { key: 'saldo', label: 'Saldo', formatter: (v) => `$${parseFloat(v || 0).toFixed(2)}` },
       { key: 'deuda', label: 'Deuda', formatter: (v) => `$${parseFloat(v || 0).toFixed(2)}` },
-      { key: 'cliente', label: 'Cliente' },
-      { key: 'nombreCliente', label: 'Nombre del Cliente' },
+      { key: 'cliente', label: 'Socio' },
+      { key: 'nombreCliente', label: 'Nombre del Socio' },
       { key: 'identificacion', label: 'Identificación' },
       { key: 'telefono', label: 'Teléfono' },
       { key: 'email', label: 'Email' },
@@ -311,72 +309,45 @@ export default function PagoServicioScreen() {
   }, []);
 
 
-  // Cargar categorías de servicios al montar el componente
-  useEffect(() => {
-    const cargarCategoriasServicios = async () => {
-      setCargandoCategorias(true);
-      try {
-        const resultado = await ApiService.devuelveCategoriasServicios({
-          usuario: userData?.usuario,
-          secuencialEmpresa: 1
-        });
-        console.log('Categorías de servicios obtenidas:', resultado);
-        if (resultado?.categorias && Array.isArray(resultado.categorias)) {
-          setCategoriasServicios(resultado.categorias);
-          if (resultado.categorias.length > 0) {
-            setCategoriaSeleccionada(resultado.categorias[0].nombre || '');
-          }
-        }
-      } catch (error) {
-        console.error('Error al cargar categorías de servicios:', error);
-        setError('No se pudieron cargar las categorías de servicios');
-      } finally {
-        setCargandoCategorias(false);
-      }
-    };
-
-    if (userData?.usuario) {
-      cargarCategoriasServicios();
-    }
-  }, [userData?.usuario]);
-
-  // Cargar servicios cuando se selecciona una categoría
-  useEffect(() => {
-    const cargarServiciosPorCategoria = async () => {
-      if (!categoriaSeleccionada) {
-        setServicios([]);
-        setServicioSeleccionado('');
+  // Buscar servicios por texto (al presionar BUSCAR SERVICIO)
+  const handleBuscarServicio = async () => {
+    const criterio = (textoBusquedaServicio || '').trim();
+    if (!criterio) {
+      mostrarAdvertencia('Búsqueda vacía', 'Ingrese un criterio para buscar el servicio');
       return;
     }
-
-      setCargandoServicios(true);
+    if (!userData?.usuario) {
+      mostrarError('Error', 'No hay sesión de usuario');
+      return;
+    }
+    setCargandoServicios(true);
+    setServicios([]);
+    setServicioSeleccionado('');
+    try {
+      const resultado = await ApiService.devuelveServiciosPorCategoria({
+        usuario: userData.usuario,
+        nombreCategoria: criterio
+      });
+      if (resultado?.servicios && Array.isArray(resultado.servicios)) {
+        setServicios(resultado.servicios);
+        if (resultado.servicios.length > 0) {
+          setServicioSeleccionado(resultado.servicios[0].id || '');
+        } else {
+          mostrarInfo('Sin resultados', 'No se encontraron servicios con ese criterio');
+        }
+      } else {
+        setServicios([]);
+        mostrarInfo('Sin resultados', 'No se encontraron servicios con ese criterio');
+      }
+    } catch (error) {
+      console.error('Error al buscar servicios:', error);
       setServicios([]);
       setServicioSeleccionado('');
-      
-      try {
-        const resultado = await ApiService.devuelveServiciosPorCategoria({
-          usuario: userData?.usuario,
-          nombreCategoria: categoriaSeleccionada
-        });
-        console.log('Servicios obtenidos:', resultado);
-        if (resultado?.servicios && Array.isArray(resultado.servicios)) {
-          setServicios(resultado.servicios);
-          if (resultado.servicios.length > 0) {
-            setServicioSeleccionado(resultado.servicios[0].id || '');
-          }
-        }
-      } catch (error) {
-        console.error('Error al cargar servicios por categoría:', error);
-        setError('No se pudieron cargar los servicios de la categoría');
-      } finally {
-        setCargandoServicios(false);
-      }
-    };
-
-    if (userData?.usuario && categoriaSeleccionada) {
-      cargarServiciosPorCategoria();
+      mostrarError('Error', error.message || 'No se pudieron buscar los servicios');
+    } finally {
+      setCargandoServicios(false);
     }
-  }, [categoriaSeleccionada, userData?.usuario]);
+  };
 
   // Función para consultar y cargar recibos
   const handleConsultarRecibos = async () => {
@@ -502,84 +473,6 @@ export default function PagoServicioScreen() {
     setReciboSeleccionado(reciboId);
   };
 
-  // Función para ver detalles del recibo seleccionado
-  const handleVerDetallesRecibo = async () => {
-    if (!reciboSeleccionado) {
-      mostrarError('Error', 'Por favor seleccione un recibo');
-      return;
-    }
-
-    setCargandoDetalles(true);
-    setDetallesServicio(null);
-    
-    try {
-      // Buscar el recibo en la estructura almacenada
-      const reciboAlmacenado = recibosConDetalles.get(reciboSeleccionado);
-      
-      if (reciboAlmacenado) {
-        // Si ya tenemos los detalles almacenados, usarlos
-        console.log('Usando detalles almacenados del recibo:', reciboAlmacenado);
-        setDetallesServicio(reciboAlmacenado.detalles || reciboAlmacenado);
-        setEsDetalleRecibo(true);
-        setMostrarModalDetalles(true);
-      } else {
-        // Si no tenemos los detalles, buscarlos en la lista de recibos
-        const reciboSeleccionadoObj = recibos.find(r => {
-          const id = r.id || r.referencia || r.numero || r.codigo;
-          return id === reciboSeleccionado;
-        });
-
-        if (reciboSeleccionadoObj) {
-          // Usar los datos del recibo directamente
-          console.log('Usando datos del recibo de la lista:', reciboSeleccionadoObj);
-          setDetallesServicio(reciboSeleccionadoObj);
-          setEsDetalleRecibo(true);
-          setMostrarModalDetalles(true);
-          
-          // Actualizar el Map con los detalles
-          const nuevosRecibosMap = new Map(recibosConDetalles);
-          nuevosRecibosMap.set(reciboSeleccionado, {
-            ...reciboSeleccionadoObj,
-            detalles: reciboSeleccionadoObj
-          });
-          setRecibosConDetalles(nuevosRecibosMap);
-        } else {
-          // Si no encontramos el recibo, intentar obtener los detalles del API
-          if (!servicioSeleccionado) {
-            mostrarError('Error', 'No se pudo obtener la información del recibo');
-            return;
-          }
-
-          const valorRecibo = reciboSeleccionado;
-          const resultado = await ApiService.devuelveDetalleDelServicio({
-            usuario: userData?.usuario,
-            idServicio: servicioSeleccionado,
-            valor: valorRecibo
-          });
-          
-          console.log('Detalles del recibo obtenidos del API:', resultado);
-          setDetallesServicio(resultado);
-          setEsDetalleRecibo(true);
-          setMostrarModalDetalles(true);
-          
-          // Almacenar los detalles obtenidos
-          const nuevosRecibosMap = new Map(recibosConDetalles);
-          nuevosRecibosMap.set(reciboSeleccionado, {
-            id: reciboSeleccionado,
-            detalles: resultado
-          });
-          setRecibosConDetalles(nuevosRecibosMap);
-        }
-      }
-    } catch (error) {
-      console.error('Error al obtener detalles del recibo:', error);
-      mostrarError('Error', error.message || 'No se pudieron obtener los detalles del recibo');
-    } finally {
-      setCargandoDetalles(false);
-    }
-  };
-
-
   const handleLogout = async () => {
     setUserData(null);
     try {
@@ -624,64 +517,52 @@ export default function PagoServicioScreen() {
           </View>
         </View>
         <KeyboardAvoidingView style={{ flex: 1, width: '100%' }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <ScrollView style={{ flex: 1, width: '100%' }} contentContainerStyle={styles.scrollViewContent} keyboardShouldPersistTaps="handled">
+          <ScrollView style={{ flex: 1, width: '100%' }} contentContainerStyle={[styles.scrollViewContent, { paddingBottom: Math.max(20, insets.bottom + 16) }]} keyboardShouldPersistTaps="handled">
             <View style={globalStyles.card}>
               <Text style={styles.instruction}>
                 {'Seleccione los datos para el pago'}
               </Text>
-              <Text style={styles.label}>Categorías de Servicios</Text>
-              <View style={styles.pickerContainer}>
-                {cargandoCategorias ? (
-                  <ActivityIndicator size="small" color="#2957a4" style={styles.loadingIndicator} />
+              <Text style={styles.label}>Buscar servicio</Text>
+              <TextInput
+                style={styles.input}
+                value={textoBusquedaServicio}
+                onChangeText={(text) => setTextoBusquedaServicio((text || '').toUpperCase())}
+                placeholder="Ingrese nombre o criterio del servicio"
+                placeholderTextColor="#999"
+                editable={!cargandoServicios}
+                autoCapitalize="characters"
+              />
+              <TouchableOpacity
+                style={[styles.buscarServicioButton, cargandoServicios && styles.detailsButtonDisabled]}
+                disabled={cargandoServicios}
+                onPress={handleBuscarServicio}
+              >
+                {cargandoServicios ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
-                <Picker
-                    selectedValue={categoriaSeleccionada}
-                    onValueChange={(itemValue) => setCategoriaSeleccionada(itemValue)}
-                  style={styles.picker}
-                  dropdownIconColor="#000"
-                >
-                    {categoriasServicios.length > 0 ? (
-                      categoriasServicios.map((categoria) => (
-                    <Picker.Item
-                          key={categoria.nombre}
-                          label={categoria.nombre || 'Sin nombre'}
-                          value={categoria.nombre || ''}
-                        />
-                      ))
-                    ) : (
-                      <Picker.Item label="No hay categorías disponibles" value="" />
-                    )}
-                  </Picker>
+                  <Text style={styles.buscarServicioButtonText}>BUSCAR SERVICIO</Text>
                 )}
-                    </View>
-              
-              {categoriaSeleccionada && (
+              </TouchableOpacity>
+
+              {servicios.length > 0 && (
                 <>
                   <Text style={styles.label}>Servicios</Text>
-                    <View style={styles.pickerContainer}>
-                    {cargandoServicios ? (
-                      <ActivityIndicator size="small" color="#2957a4" style={styles.loadingIndicator} />
-                    ) : (
-                      <Picker
-                        selectedValue={servicioSeleccionado}
-                        onValueChange={(itemValue) => setServicioSeleccionado(itemValue)}
-                        style={styles.picker}
-                        dropdownIconColor="#000"
-                      >
-                        {servicios.length > 0 ? (
-                          servicios.map((servicio) => (
-                          <Picker.Item
-                              key={servicio.id}
-                              label={servicio.nombre || 'Sin nombre'}
-                              value={servicio.id || ''}
-                          />
-                          ))
-                        ) : (
-                          <Picker.Item label="No hay servicios disponibles" value="" />
-                        )}
-                      </Picker>
-                    )}
-                    </View>
+                  <View style={styles.pickerContainer}>
+                    <Picker
+                      selectedValue={servicioSeleccionado}
+                      onValueChange={(itemValue) => setServicioSeleccionado(itemValue)}
+                      style={styles.picker}
+                      dropdownIconColor="#000"
+                    >
+                      {servicios.map((servicio) => (
+                        <Picker.Item
+                          key={servicio.id}
+                          label={servicio.nombre || 'Sin nombre'}
+                          value={servicio.id || ''}
+                        />
+                      ))}
+                    </Picker>
+                  </View>
                 </>
               )}
 
@@ -750,11 +631,12 @@ export default function PagoServicioScreen() {
                             {recibos.length > 0 ? (
                               recibos.map((recibo, index) => {
                                 const reciboId = recibo.id || recibo.referencia || recibo.numero || recibo.codigo || `recibo-${index}`;
-                                const reciboLabel = recibo.descripcion || recibo.nombre || recibo.referencia || recibo.numero || `Recibo ${index + 1}`;
+                                const reciboLabel = recibo.descripcion || recibo.nombre || recibo.referencia || recibo.numero || `Recibo ${index + 1}`;                                
+                                const fechaVencimientoLabel = recibo.fechaVencimiento ? recibo.fechaVencimiento.split('T')[0] : null;
                                 return (
                                   <Picker.Item
                                     key={reciboId}
-                                    label={reciboLabel}
+                                    label={reciboLabel + (fechaVencimientoLabel ? ' - ' + fechaVencimientoLabel : '')}
                                     value={reciboId}
                                   />
                                 );
@@ -789,7 +671,7 @@ export default function PagoServicioScreen() {
                           monto = reciboInfo.valor;
                         }
                         
-                        const fechaVencimiento = reciboInfo?.fechaVencimiento || null;
+                        const fechaVencimiento = reciboInfo?.fechaVencimiento ? reciboInfo.fechaVencimiento.split('T')[0] : null;
                         
                         return (monto || fechaVencimiento) ? (
                           <View style={styles.reciboInfoContainer}>
@@ -809,23 +691,6 @@ export default function PagoServicioScreen() {
                         ) : null;
                       })()}
 
-                      {/* Botón Ver Detalles del Recibo */}
-                      {recibos.length > 0 && (
-                        <TouchableOpacity
-                          style={[
-                            styles.detailsButton,
-                            (!reciboSeleccionado || cargandoDetalles) && styles.detailsButtonDisabled
-                          ]}
-                          disabled={!reciboSeleccionado || cargandoDetalles}
-                          onPress={handleVerDetallesRecibo}
-                        >
-                          {cargandoDetalles ? (
-                            <ActivityIndicator size="small" color="#FFFFFF" />
-                          ) : (
-                            <Text style={styles.detailsButtonText}>VER DETALLES</Text>
-                          )}
-                        </TouchableOpacity>
-                      )}
                     </>
                   )}
 
@@ -914,7 +779,7 @@ const styles = StyleSheet.create({
   },
   scrollViewContent: {
     width: '100%',
-    paddingBottom: 20,
+    flexGrow: 1,
   },
   instruction: {
     fontSize: 16,
@@ -1069,10 +934,12 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     marginBottom: 15,
     overflow: 'hidden',
+    backgroundColor: '#fff',
   },
   picker: {
     height: 40,
     width: '100%',
+    color: '#2B4F8C',
   },
   loadingIndicator: {
     padding: 10,
@@ -1094,6 +961,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#A0AEC0',
   },
   detailsButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  buscarServicioButton: {
+    backgroundColor: '#2B4F8C',
+    borderRadius: 5,
+    padding: 12,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  buscarServicioButtonText: {
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: 'bold',
