@@ -20,7 +20,7 @@ const AlertasTabScreen = () => {
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={['#2B4F8C', '#2B4F8C']}
+        colors={['#2B4F8C', '#1e3a5f']}
         style={styles.gradient}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
