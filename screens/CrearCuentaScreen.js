@@ -35,7 +35,7 @@ export default function CrearCuentaScreen() {
       const tiposCuenta = await ApiService.buscarTipoCuenta({
         secuencialCliente,
         secuencialEmpresa: 1,
-        codigoProductoVista: '12',        
+        codigoProductoVista: '1',        
         usuario: userData?.usuario
       });
       
@@ -51,17 +51,23 @@ export default function CrearCuentaScreen() {
         return tiposCuenta;
       }
       
-      // Si no hay error, procesar normalmente
+      // Si no hay error, procesar normalmente: solo listar tipos con valorApertura igual a 0
       setErrorTiposCuenta('');
-      setCuentasDisponibles(tiposCuenta || []);
-      
+      const tiposConAperturaCero = (tiposCuenta || []).filter(
+        cuenta => Number(cuenta.valorApertura) === 0
+      );
+      setCuentasDisponibles(tiposConAperturaCero);
+
       // Seleccionar el primer tipo de cuenta por defecto si hay opciones disponibles
-      if (tiposCuenta?.length > 0) {
-        setTipoCuenta(String(tiposCuenta[0].codigo));
-        setMontoApertura(String(tiposCuenta[0].valorApertura || '0'));
+      if (tiposConAperturaCero.length > 0) {
+        setTipoCuenta(String(tiposConAperturaCero[0].codigo));
+        setMontoApertura(String(tiposConAperturaCero[0].valorApertura || '0'));
+      } else {
+        setTipoCuenta('');
+        setMontoApertura('');
       }
-      
-      return tiposCuenta;
+
+      return tiposConAperturaCero;
     } catch (error) {
       console.error('Error al buscar tipos de cuenta:', error);
       setError(error.message || 'Error al cargar los tipos de cuenta');
@@ -179,7 +185,7 @@ export default function CrearCuentaScreen() {
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={['#2B4F8C', '#1e3a5f']}
+        colors={['#325191', '#38599E']}
         style={styles.gradient}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
@@ -255,7 +261,7 @@ export default function CrearCuentaScreen() {
             {cliente && (
               <View style={styles.clientInfo}>
                 <Text style={styles.clientName}>
-                  {cliente.nombres} {cliente.apellidos}
+                  {[cliente.nombres || cliente.nombre, cliente.apellidos || cliente.apellido].filter(Boolean).map(s => String(s).trim()).filter(Boolean).join(' ') || cliente.nombreComercial || 'No disponible'}
                 </Text>
                 <Text style={styles.clientId}>
                   {cliente.identificacion}

@@ -11,8 +11,7 @@ import { useCustomModal } from '../hooks/useCustomModal';
 const menuItems = [
   { label: 'RETIRO', icon: require('../assets/ico-retiro.png'), route: '/datostransaccion', accion: 'retiro' },
   { label: 'DEPÓSITO', icon: require('../assets/ico-deposito.png'), route: '/datostransaccion', accion: 'deposito' },
-  // { label: 'PAGO PRÉSTAMOS', icon: require('../assets/ico-prestamo.png'), route: '/datostransaccionprestamo', accion: 'prestamo' },
-  { label: 'PAGO SERVICIO', icon: require('../assets/ico-terceros.png'), route: '/pagodeservicio', accion: 'pago' },
+  { label: 'PAGO SERVICIO', icon: require('../assets/ico-terceros.png'), route: '/pagodeservicio', accion: 'pagoServicio' },
   { label: 'CREAR CUENTA', icon: require('../assets/ico-cuentas.png'), route: '/crearcuenta', accion: 'cuenta' },
   { label: 'CREAR SOCIO', icon: require('../assets/ico-clientes.png'), route: '/crearcliente', accion: 'cliente' },
   { label: 'ALERTAS', icon: require('../assets/ico-alertas.png'), route: '/alertastab', accion: 'alerta' },
@@ -120,7 +119,7 @@ export default function MenuScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient
-        colors={['#2B4F8C', '#1e3a5f']}
+        colors={['#325191', '#38599E']}
         style={styles.gradient}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}

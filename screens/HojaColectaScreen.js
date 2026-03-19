@@ -25,12 +25,10 @@ export default function HojaColectaScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [transacciones, setTransacciones] = useState([]);
   const [fecha, setFecha] = useState(new Date());
-  const [resumen, setResumen] = useState({
-    totalDepositos: 0,
-    totalRetiros: 0,
-    totalComisiones: 0,
-    saldoCaja: 0
-  });
+  const [tiposTransacciones, setTiposTransacciones] = useState([]);
+  /** Resumen para la sección de resumen: solo datos de obtenerTiposTransacciones (saldoCaja + tiposTransacciones) */
+  const [resumenTipos, setResumenTipos] = useState({ saldoCaja: 0, items: [], totalComisiones: 0 });
+  const [saldoCuentaAsociada, setSaldoCuentaAsociada] = useState(null);
   const [error, setError] = useState(null);
 
   const cargarDatos = async () => {
@@ -44,24 +42,15 @@ export default function HojaColectaScreen() {
         console.error('No hay datos de usuario disponibles');
         setError('No hay datos de usuario disponibles');
         setTransacciones([]);
-        setResumen({
-          totalDepositos: 0,
-          totalRetiros: 0,
-          totalComisiones: 0,
-          saldoCaja: 0
-        });
+        setTiposTransacciones([]);
+        setResumenTipos({ saldoCaja: 0, items: [], totalComisiones: 0 });
+        setSaldoCuentaAsociada(null);
         setLoading(false);
         return;
       }
       
       // Intentar obtener datos de la API
       let apiTransacciones = [];
-      let apiResumen = {
-        totalDepositos: 0,
-        totalRetiros: 0,
-        totalComisiones: 0,
-        saldoCaja: 0
-      };
       
       try {
         const response = await ApiService.obtenerTransaccionesHojaColecta({
@@ -74,6 +63,31 @@ export default function HojaColectaScreen() {
 
         console.log('Respuesta transacciones completa:', JSON.stringify(response, null, 2));
         console.log('Respuesta tipos completa:', JSON.stringify(tipos, null, 2));
+
+        const listaTipos = Array.isArray(tipos)
+          ? tipos
+          : (tipos?.tiposTransacciones ?? tipos?.data?.tiposTransacciones ?? tipos?.lista ?? tipos?.tipos ?? tipos?.data ?? tipos?.items ?? []);
+        const arrTipos = Array.isArray(listaTipos) ? listaTipos : [];
+        const normalizados = arrTipos.map((item) => ({
+          nombre: String(item?.nombre ?? item?.descripcion ?? item?.tipo ?? '').trim(),
+          valor: Number(item?.valor ?? item?.monto ?? item?.importe ?? 0)
+        }));
+        const totalComisionesTipos = arrTipos.reduce((sum, item) => sum + (Number(item?.comisiones) ?? 0), 0);
+        setTiposTransacciones(normalizados);
+        const saldoCajaTipos = Number(tipos?.saldoCaja ?? tipos?.data?.saldoCaja ?? 0);
+        setResumenTipos({
+          saldoCaja: saldoCajaTipos,
+          items: normalizados,
+          totalComisiones: totalComisionesTipos
+        });
+
+        try {
+          const saldo = await ApiService.solicitudSaldoCuenta({ usuario: userData.usuario });
+          setSaldoCuentaAsociada(Number(saldo) ?? 0);
+        } catch (saldoError) {
+          console.warn('Error al obtener saldo en cuenta asociada:', saldoError);
+          setSaldoCuentaAsociada(0);
+        }
         
         // Manejar diferentes estructuras de respuesta
         let transaccionesData = [];
@@ -106,55 +120,24 @@ export default function HojaColectaScreen() {
         
         console.log('Transacciones mapeadas:', apiTransacciones);
         
-        // Calcular resumen
-        const totalDepositos = apiTransacciones
-          ?.filter(t => t.tipo && (t.tipo.toLowerCase().includes('depósito') || t.tipo.toLowerCase().includes('deposito')))
-          .reduce((sum, t) => sum + (t.valor || 0), 0) || 0;
-          
-        const totalRetiros = apiTransacciones
-          ?.filter(t => t.tipo && t.tipo.toLowerCase().includes('retiro'))
-          .reduce((sum, t) => sum + (t.valor || 0), 0) || 0;
-          
-        const totalComisiones = apiTransacciones
-          ?.filter(t => t.tipo && (t.tipo.toLowerCase().includes('comisión') || t.tipo.toLowerCase().includes('comision')))
-          .reduce((sum, t) => sum + (t.valor || 0), 0) || 0;
-          
-        const saldoCaja = tipos.saldoCaja || tipos.saldo || tipos.balance || 0;
-        
-        apiResumen = {
-          totalDepositos,
-          totalRetiros,
-          totalComisiones,
-          saldoCaja
-        };
-        
-        console.log('Resumen calculado:', apiResumen);
-        
       } catch (apiError) {
         console.error('Error en la API:', apiError);
         setError('Error de conexión. No se pudieron cargar los datos.');
         apiTransacciones = [];
-        apiResumen = {
-          totalDepositos: 0,
-          totalRetiros: 0,
-          totalComisiones: 0,
-          saldoCaja: 0
-        };
+        setTiposTransacciones([]);
+        setSaldoCuentaAsociada(null);
+        // No resetear resumenTipos aquí: ya pudo haberse asignado correctamente antes del error (ej. fallo al procesar transacciones)
       }
       
       setTransacciones(apiTransacciones);
-      setResumen(apiResumen);
       
     } catch (error) {
       console.error('Error general al cargar transacciones:', error);
       setError('Error al cargar datos.');
       setTransacciones([]);
-      setResumen({
-        totalDepositos: 0,
-        totalRetiros: 0,
-        totalComisiones: 0,
-        saldoCaja: 0
-      });
+      setTiposTransacciones([]);
+      setResumenTipos({ saldoCaja: 0, items: [], totalComisiones: 0 });
+      setSaldoCuentaAsociada(null);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -178,17 +161,16 @@ export default function HojaColectaScreen() {
       loading,
       refreshing,
       error,
-      transaccionesCount: transacciones.length,
-      resumen
+      transaccionesCount: transacciones.length
     });
-  }, [loading, refreshing, error, transacciones, resumen]);
+  }, [loading, refreshing, error, transacciones]);
 
   // Asegurar que el componente siempre renderice algo
   if (!userData) {
     return (
       <View style={styles.container}>
         <LinearGradient
-          colors={['#2B4F8C', '#1e3a5f']}
+          colors={['#325191', '#38599E']}
           style={styles.gradient}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
@@ -223,7 +205,7 @@ export default function HojaColectaScreen() {
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={['#2B4F8C', '#1e3a5f']}
+        colors={['#325191', '#38599E']}
         style={styles.gradient}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
@@ -287,57 +269,43 @@ export default function HojaColectaScreen() {
                 </View>
               )}
               
-              {/* Sección de Resumen */}
-              <View style={styles.summaryCard}>                
-                
-                <View style={styles.summaryRow}>
-                  
-                  <View style={styles.summaryItem}>
-                    <Text style={[styles.summaryLabel, {fontWeight: 'bold'}]}>Saldo Caja</Text>
-                    <Text style={[styles.summaryValue, styles.balanceAmount]}>
-                      S/ {(resumen?.saldoCaja || 0)}
-                    </Text>
-                  </View>   
-
-                  <View style={styles.summaryDivider} />
-
-                  <View style={styles.summaryItem}>
-                    <Text style={styles.summaryLabel}>Depósitos</Text>
-                    <Text style={[styles.summaryValue, styles.positiveAmount]}>S/ {(resumen?.totalDepositos || 0)}</Text>
+              {/* Sección de Resumen: solo datos de la respuesta obtenerTiposTransacciones */}
+              <View style={styles.summaryCard}>
+                {[
+                  { nombre: 'Saldo Caja', valor: resumenTipos.saldoCaja, isSaldoCaja: true },
+                  ...(resumenTipos.items || []),
+                  { nombre: 'Comisiones', valor: resumenTipos.totalComisiones ?? 0 },
+                  { nombre: 'Saldo cuenta', valor: saldoCuentaAsociada ?? 0, isSaldoCuentaAsociada: true }
+                ].reduce((rows, item, index) => {
+                  if (index % 2 === 0) rows.push([]);
+                  rows[rows.length - 1].push(item);
+                  return rows;
+                }, []).map((row, rowIndex) => (
+                  <View key={`row-${rowIndex}`} style={[styles.summaryRow, rowIndex > 0 && { marginTop: 10 }]}>
+                    {row.map((item, colIndex) => (
+                      <React.Fragment key={item.isSaldoCaja ? 'saldo-caja' : item.isSaldoCuentaAsociada ? 'saldo-cuenta-asociada' : `item-${rowIndex}-${colIndex}-${item.nombre}`}>
+                        {colIndex > 0 && <View style={styles.summaryDivider} />}
+                        <View style={styles.summaryItem}>
+                          <Text style={[styles.summaryLabel, (item.isSaldoCaja || item.isSaldoCuentaAsociada) && { fontWeight: 'bold' }]}>{item.nombre || '—'}</Text>
+                          <Text style={[
+                            styles.summaryValue,
+                            (item.isSaldoCaja || item.isSaldoCuentaAsociada) && styles.balanceAmount,
+                            !item.isSaldoCaja && !item.isSaldoCuentaAsociada && {
+                              color: (() => {
+                                const n = (item.nombre || '').toLowerCase();
+                                if (n === 'retiro') return '#E74C3C';
+                                if (n === 'comisiones') return '#F39C12';
+                                return '#2BAC6B';
+                              })()
+                            }
+                          ]}>
+                            $ {(Number(item.valor) ?? 0).toFixed(2)}
+                          </Text>
+                        </View>
+                      </React.Fragment>
+                    ))}
                   </View>
-
-
-                </View>
-                
-                <View style={[styles.summaryRow, {marginTop: 10}]}>                
-
-                  <View style={styles.summaryItem}>
-                    <Text style={styles.summaryLabel}>Comisiones</Text>
-                    <Text style={[styles.summaryValue, styles.commissionAmount]}>S/ {(resumen?.totalComisiones || 0)}</Text>
-                  </View>  
-
-                  <View style={styles.summaryDivider} />    
-
-                  <View style={styles.summaryItem}>
-                    <Text style={styles.summaryLabel}>Retiros</Text>
-                    <Text style={[styles.summaryValue, styles.negativeAmount]}>S/ {(resumen?.totalRetiros || 0)}</Text>
-                  </View>
-                </View>
-
-                <View style={[styles.summaryRow, {marginTop: 10}]}>                
-
-                  <View style={styles.summaryItem}>
-                    <Text style={styles.summaryLabel}>Pago a Terceros</Text>
-                    <Text style={[styles.summaryValue, styles.positiveAmount]}>S/ {(resumen?.totalComisiones || 0)}</Text>
-                  </View>  
-
-                  <View style={styles.summaryDivider} />    
-
-                  <View style={styles.summaryItem}>
-                    <Text style={styles.summaryLabel}>Abono a préstamos</Text>
-                    <Text style={[styles.summaryValue, styles.positiveAmount]}>S/ {(resumen?.totalRetiros || 0)}</Text>
-                  </View>
-                </View>
+                ))}
               </View>
               
               <Text style={styles.transactionsTitle}>TRANSACCIONES</Text>
@@ -355,9 +323,9 @@ export default function HojaColectaScreen() {
                         <Text style={styles.transactionType}>{transaccion.tipo}</Text>
                         <Text style={[
                           styles.transactionAmount,
-                          { color: transaccion.tipo === 'Depósito' ? '#2BAC6B' : '#E74C3C' }
+                          { color: transaccion.tipo === 'retiro' ? '#E74C3C' : '#2BAC6B' }
                         ]}>
-                          {transaccion.tipo === 'Depósito' ? '+' : '-'} S/ {transaccion.monto}
+                          $ {Number(transaccion.monto ?? 0).toFixed(2)}
                         </Text>
                       </View>
                       <View style={styles.transactionDetails}>

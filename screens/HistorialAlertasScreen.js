@@ -5,6 +5,25 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AuthContext } from '../context/AuthContext';
 import ApiService from '../services/ApiService';
 
+const formatSoloFecha = (fechaStr) => {
+  if (fechaStr == null || String(fechaStr).trim() === '') return '';
+  const d = new Date(fechaStr);
+  if (Number.isNaN(d.getTime())) return String(fechaStr);
+  return d.toLocaleDateString('es-EC', { dateStyle: 'short' });
+};
+
+const formatHora = (horaStr) => {
+  if (horaStr == null || String(horaStr).trim() === '') return '';
+  const s = String(horaStr).trim().replace(/\D/g, '');
+  if (s.length >= 6) {
+    return `${s.slice(0, 2)}:${s.slice(2, 4)}:${s.slice(4, 6)}`;
+  }
+  if (s.length >= 4) {
+    return `${s.slice(0, 2)}:${s.slice(2, 4)}`;
+  }
+  return String(horaStr).trim();
+};
+
 const HistorialAlertasScreen = () => {
   const router = useRouter();
   const { userData } = useContext(AuthContext);
@@ -40,8 +59,21 @@ const HistorialAlertasScreen = () => {
   const renderItem = ({ item }) => (
     <View style={styles.itemCard}>
       <Text style={styles.tipo}>{item.idTipo || 'Tipo desconocido'}</Text>
+      {(item.estado ?? item.estadoAlerta ?? item.estadoNombre ?? item.nombreEstado) ? (
+        <Text style={styles.estado}>
+          Estado: {String(item.estado ?? item.estadoAlerta ?? item.estadoNombre ?? item.nombreEstado)}
+        </Text>
+      ) : null}
       <Text style={styles.descripcion}>{item.descripcion}</Text>
-      <Text style={styles.fecha}>{item.fecha}</Text>
+      {(item.comentario ?? item.comentarios ?? item.observacion ?? item.observaciones) != null &&
+       String(item.comentario ?? item.comentarios ?? item.observacion ?? item.observaciones).trim() !== '' ? (
+        <Text style={styles.comentario}>
+          Comentario: {String(item.comentario ?? item.comentarios ?? item.observacion ?? item.observaciones).trim()}
+        </Text>
+      ) : null}
+      <Text style={styles.fecha}>
+          {[formatSoloFecha(item.fecha), formatHora(item.hora)].filter(Boolean).join(' ')}
+        </Text>
     </View>
   );
 
@@ -128,6 +160,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     marginBottom: 5,
+  },
+  estado: {
+    color: '#2B4F8C',
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  comentario: {
+    color: '#555',
+    fontSize: 13,
+    fontStyle: 'italic',
+    marginBottom: 8,
   },
   descripcion: {
     color: '#444',

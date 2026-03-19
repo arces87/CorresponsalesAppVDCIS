@@ -173,7 +173,7 @@ export default function ProbarImpresionScreen() {
     rows.push(`<tr><td colspan="2" style="text-align:center;font-size:11px;">Operación realizada en su Asesor Virtual</td></tr>`);
     rows.push(`<tr><td colspan="2"><hr/></td></tr>`);
     rows.push(`<tr><td colspan="2" style="text-align:center;font-weight:bold;">PRUEBA DE IMPRESIÓN</td></tr>`);
-    rows.push(`<tr><td colspan="2" style="text-align:center;font-size:16px;font-weight:bold;">S/ 105.00</td></tr>`);
+    rows.push(`<tr><td colspan="2" style="text-align:center;font-size:16px;font-weight:bold;">$ 105.00</td></tr>`);
     rows.push(`<tr><td colspan="2"><hr/></td></tr>`);
     rows.push(`<tr><td style="font-weight:bold;">Fecha y Hora:</td><td>${fechaHora}</td></tr>`);
     rows.push(`<tr><td style="font-weight:bold;">Nombre del Socio:</td><td>Socio de Prueba</td></tr>`);
@@ -345,7 +345,7 @@ export default function ProbarImpresionScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <LinearGradient
-        colors={[colors.primary, '#1a4a7a']}
+        colors={['#325191', '#38599E']}
         style={styles.gradient}
       >
         <View style={globalStyles.header}>
@@ -468,7 +468,7 @@ export default function ProbarImpresionScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalErrorImpresionContainer}>
             <LinearGradient
-              colors={['#2B4F8C', '#1e3a5f']}
+              colors={['#325191', '#2a4580']}
               style={styles.modalErrorImpresionGradient}
               start={{ x: 0.5, y: 0 }}
               end={{ x: 0.5, y: 1 }}

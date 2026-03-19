@@ -119,7 +119,7 @@ export default function HistorialTransaccionesScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient
-        colors={['#2B4F8C', '#1e3a5f']}
+        colors={['#325191', '#38599E']}
         style={styles.gradient}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
@@ -266,7 +266,7 @@ export default function HistorialTransaccionesScreen() {
                     <View style={styles.transaccionHeader}>
                       <Text style={styles.transaccionTipo}>{transaccion.tipo || 'Sin tipo'}</Text>
                       <Text style={styles.transaccionMonto}>
-                        S/{transaccion.valor ? transaccion.valor.toFixed(2) : '0.00'}
+                        ${transaccion.valor ? transaccion.valor.toFixed(2) : '0.00'}
                       </Text>
                     </View>
                     <Text style={styles.transaccionFecha}>

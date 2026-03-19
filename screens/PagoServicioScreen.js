@@ -16,17 +16,29 @@ export default function PagoServicioScreen() {
   const { checkSessionExpired, setUserData, catalogos, userData } = useContext(AuthContext);
   const insets = useSafeAreaInsets();
   const { modalVisible, modalData, mostrarError, mostrarAdvertencia, mostrarInfo, cerrarModal } = useCustomModal();
-  const [numeroContrato, setNumeroContrato] = useState('');
-  const [identificacionTitular, setIdentificacionTitular] = useState('');
-  const [correoTitular, setCorreoTitular] = useState('');
   const [loading, setLoading] = useState(false);
-  const [valorTransaccion, setValorTransaccion] = useState('');
   const [menuLabel, setMenuLabel] = useState('');
   const [menuAccion, setMenuAccion] = useState('');
-  const [textoBusquedaServicio, setTextoBusquedaServicio] = useState('');
   const [servicios, setServicios] = useState([]);
   const [cargandoServicios, setCargandoServicios] = useState(false);
   const [servicioSeleccionado, setServicioSeleccionado] = useState('');
+  const [productos, setProductos] = useState([]);
+  const [cargandoProductos, setCargandoProductos] = useState(false);
+  const [productoSeleccionado, setProductoSeleccionado] = useState('');
+  /** Campos del formulario (inputs del usuario) */
+  const [formInputs, setFormInputs] = useState({
+    referencia: '',
+    codigoPensionAlimenticia: '',
+    numeroCuotasPensionAlimenticia: '',
+    valorTonelaje: '',
+    valorAbono: '',
+    valorRecarga: ''
+  });
+  /** Objeto construido para el request pagarServicio (se arma la primera vez que se obtienen los datos de consulta o recarga) */
+  const [datosPagoServicio, setDatosPagoServicio] = useState(null);
+  const [recargaSeleccionada, setRecargaSeleccionada] = useState('');
+  const [consultaResponse, setConsultaResponse] = useState(null);
+  const [tituloBoton, setTituloBoton] = useState('Consultar');
   const [cargandoDetalles, setCargandoDetalles] = useState(false);
   const [detallesServicio, setDetallesServicio] = useState(null);
   const [mostrarModalDetalles, setMostrarModalDetalles] = useState(false);
@@ -34,92 +46,215 @@ export default function PagoServicioScreen() {
   const [cargandoRecibos, setCargandoRecibos] = useState(false);
   const [reciboSeleccionado, setReciboSeleccionado] = useState('');
   const [esDetalleRecibo, setEsDetalleRecibo] = useState(false);
-  // Estructura para almacenar temporalmente los recibos con sus detalles
   const [recibosConDetalles, setRecibosConDetalles] = useState(new Map());
+  const [mostrarModalRubros, setMostrarModalRubros] = useState(false);
+  /** Índice hasta el cual hay rubros seleccionados (inclusive). Selección siempre contigua desde 0. -1 = ninguno. */
+  const [rubrosSeleccionadosHasta, setRubrosSeleccionadosHasta] = useState(-1);
 
-  const handleContinuar = async () => {
+  const productoObj = productos.find(p =>
+    String(p.idProducto || p.id || '') === String(productoSeleccionado)
+  );
+  const tieneConsulta = productoObj && (productoObj.trxConsulta != null && String(productoObj.trxConsulta).trim() !== '');
+  const tipoPago = productoObj?.tipoPago || '';
+  const tipoControl = productoObj?.tipoControl || '';
+  const valoresRecarga = (() => {
+    const raw = productoObj?.valoresRecarga;
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw;
+    if (typeof raw === 'string') {
+      try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (_) {
+        return [];
+      }
+    }
+    return [];
+  })();
+
+  const idProductoActual = String(productoObj?.idProducto || productoObj?.id || productoSeleccionado || '');
+
+  /** Construye datosPagoServicio a partir de la respuesta de consulta (Total/Abono/Parcial) */
+  const buildDatosPagoServicioFromConsulta = (resultado, valor, rubros) => ({
+    comision: resultado.comision != null ? Number(resultado.comision) : null,
+    idProducto: idProductoActual || null,
+    referencia: (formInputs.referencia || '').trim() || null,
+    valor: Number(valor) || 0,
+    secuencialResultadoTransaccion: resultado.secuencialResultadoTransaccion ?? null,
+    comisionRubro: productoObj?.comisionRubro ?? null,
+    rubros: rubros && Array.isArray(rubros) ? rubros : [],
+    valorTonelaje: (formInputs.valorTonelaje || '').trim() || null,
+    identificacion: null,
+    numeroCuotasPensionesAlimenticiaPersona: (formInputs.numeroCuotasPensionAlimenticia || '').trim() !== '' ? parseInt(formInputs.numeroCuotasPensionAlimenticia, 10) : null,
+    codigoPagarPensionesAlimenticiaEmpresa: (formInputs.codigoPensionAlimenticia || '').trim() || null,
+    nombreCliente: resultado.nombre ?? null
+  });
+
+  /** Construye datosPagoServicio para flujo sin consulta (recarga) */
+  const buildDatosPagoServicioRecarga = (valor) => ({
+    comision: null,
+    idProducto: idProductoActual || null,
+    referencia: (formInputs.referencia || '').trim() || null,
+    valor: Number(valor) || 0,
+    secuencialResultadoTransaccion: null,
+    comisionRubro: null,
+    rubros: [],
+    valorTonelaje: (formInputs.valorTonelaje || '').trim() || null,
+    identificacion: null,
+    numeroCuotasPensionesAlimenticiaPersona: null,
+    codigoPagarPensionesAlimenticiaEmpresa: (formInputs.codigoPensionAlimenticia || '').trim() || null,
+    nombreCliente: null
+  });
+
+  const navegarAOtpPagoServicio = (datosPago, consultaDatosOverride = null) => {
+    const servicioObj = servicios.find(s =>
+      String(s.servicio) === String(servicioSeleccionado)
+    );
+    const consultaDatos = consultaDatosOverride ?? consultaResponse;
+    const valorPago = Number(datosPago?.valor ?? 0);
+    const comisionNum = Number(datosPago?.comision ?? 0);
+    const valorTotal = valorPago + comisionNum;
+    setUserData(prev => ({
+      ...prev,
+      nombrecliente: datosPago?.nombreCliente ?? consultaDatos?.nombre ?? prev?.nombrecliente,
+      pagoServicioFlow: {
+        servicio: servicioObj || servicioSeleccionado,
+        producto: productoObj || productoSeleccionado,
+        consultaDatos: consultaDatos || null,
+        datosPagoServicio: datosPago
+      }
+    }));
+    const otpAgente = userData?.jsonNegocio?.cobroServicios?.validarOtpAgente ?? false;
+    const otpCliente = userData?.jsonNegocio?.cobroServicios?.validarOtpCliente ?? false;
+    router.push({
+      pathname: '/otpverificacion',
+      params: {
+        transaccion: 'PagoServicio',
+        accionTransaccion: menuAccion || 'pagoServicio',
+        monto: String(valorPago),
+        comision: String(comisionNum),
+        total: String(valorTotal),
+        labelTransaccion: 'Pago de servicio',
+        otpCliente: otpCliente ? 'true' : 'false',
+        otpAgente: otpAgente ? 'true' : 'false'
+      }
+    });
+  };
+
+  const handleConsultarOSiguiente = async () => {
     if (!servicioSeleccionado) {
       mostrarError('Error', 'Por favor seleccione un servicio');
       return;
     }
+    if (productos.length > 0 && !productoSeleccionado) {
+      mostrarError('Error', 'Por favor seleccione un producto');
+      return;
+    }
+    const ref = (formInputs.referencia || '').trim();
+    // En recargas (trxconsulta vacía / !tieneConsulta) la referencia también es obligatoria.
+    if (!tieneConsulta && !ref) {
+      mostrarError('Error', 'Ingrese la referencia / código para pago');
+      return;
+    }
 
-    if (!numeroContrato) {
-      mostrarError('Error', 'Por favor ingrese el número de contrato o cuenta');
+    if (!tieneConsulta) {
+      if (valoresRecarga.length > 0) {
+        if (!recargaSeleccionada) {
+          mostrarError('Error', 'Seleccione un valor de recarga');
+          return;
+        }
+        const recarga = valoresRecarga.find(r =>
+          String(r.Valor ?? r.valor ?? r.id ?? r) === String(recargaSeleccionada)
+        );
+        const valor = recarga ? (Number(recarga.Valor ?? recarga.valor ?? recarga.monto ?? recarga) || Number(recargaSeleccionada)) : Number(recargaSeleccionada);
+        const datosRecarga = buildDatosPagoServicioRecarga(Number(valor) || 0);
+        setDatosPagoServicio(datosRecarga);
+        navegarAOtpPagoServicio(datosRecarga);
+        return;
+      }
+      const valorRec = (formInputs.valorRecarga || '').trim();
+      if (!valorRec || isNaN(Number(valorRec)) || Number(valorRec) <= 0) {
+        mostrarError('Error', 'Ingrese el valor de recarga');
+        return;
+      }
+      const datosRecarga = buildDatosPagoServicioRecarga(Number(valorRec));
+      setDatosPagoServicio(datosRecarga);
+      navegarAOtpPagoServicio(datosRecarga);
+      return;
+    }
+
+    if (tituloBoton === 'Siguiente' && tipoPago === 'A') {
+      const valorTotal = Number(consultaResponse?.valorTotal ?? consultaResponse?.valortotal ?? 0);
+      const abono = (formInputs.valorAbono || '').trim();
+      if (!abono || isNaN(Number(abono)) || Number(abono) <= 0) {
+        mostrarError('Error', 'Ingrese el valor del abono');
+        return;
+      }
+      if (Number(abono) > valorTotal) {
+        mostrarError('Error', 'El abono no puede ser mayor al valor total');
+        return;
+      }
+      const datosAbono = buildDatosPagoServicioFromConsulta(consultaResponse, Number(abono), consultaResponse?.rubros || []);
+      setDatosPagoServicio(datosAbono);
+      navegarAOtpPagoServicio(datosAbono, consultaResponse);
       return;
     }
 
     setLoading(true);
     try {
-      const reciboData = reciboSeleccionado ? recibosConDetalles.get(reciboSeleccionado) : null;
-      
-      // Obtener el valor del recibo seleccionado
-      let valorDelRecibo = null;
-      if (reciboData) {
-        // Intentar obtener el monto desde importes
-        if (reciboData.importes && Array.isArray(reciboData.importes) && reciboData.importes.length > 0) {
-          const totalImportes = reciboData.importes.reduce((sum, imp) => {
-            const valor = imp.valorImporte?.monto || imp.monto || imp.valor || 0;
-            return sum + Number(valor);
-          }, 0);
-          valorDelRecibo = totalImportes > 0 ? totalImportes : null;
-        }
-        // Si no hay importes, intentar obtener desde propiedades directas
-        if (!valorDelRecibo) {
-          valorDelRecibo = reciboData.monto || reciboData.valor || null;
-        }
-      }
-      
-      // Si no hay recibo o no se pudo obtener el valor, mostrar error
-      if (!valorDelRecibo) {
-        mostrarError('Error', 'No se pudo obtener el valor del recibo. Por favor, seleccione un recibo válido.');
-        setLoading(false);
+      const numCuotas = (formInputs.numeroCuotasPensionAlimenticia || '').trim();
+      const numeroCuotasPension = numCuotas === '' ? 0 : parseInt(numCuotas, 10);
+      const idProducto = String(productoObj?.idProducto || productoObj?.id || productoSeleccionado);
+
+      const resultado = await ApiService.consultaServicio({
+        referencia: ref,
+        identificacion: userData?.identificacioncliente || '',
+        idProducto,
+        codigoPagarPensionesAlimenticiaEmpresa: (formInputs.codigoPensionAlimenticia || '').trim() || undefined,
+        numeroCuotasPensionesAlimenticiaPersona: isNaN(numeroCuotasPension) ? 0 : numeroCuotasPension,
+        valorTonelaje: (formInputs.valorTonelaje || '').trim() || undefined,
+        usuario: userData?.usuario
+      });
+
+      if (resultado.codigoResultado !== '000') {
+        mostrarError('Consulta', (resultado.mensaje || 'Código: ' + (resultado.codigoResultado || '') + ' -- ' + (resultado.mensaje || '')));
         return;
       }
-      
-      // Buscar el servicio seleccionado en el array de servicios para obtener proveedorServicio (nombre)
-      const servicioObj = servicios.find(s => 
-        s.id === servicioSeleccionado || 
-        String(s.id) === String(servicioSeleccionado)
-      );
-      const proveedorServicio = servicioObj?.nombre || null;
-      
-      const nombreTitular = reciboData?.titularCuenta || null;
 
-      setUserData(prevData => {
-        return {
-        ...prevData,
-          idservicio: servicioSeleccionado,
-          proveedorsevicio: proveedorServicio,
-          recibo: reciboData || null,        
-          referencia: numeroContrato,          
-          valorafectado: parseFloat(valorDelRecibo),          
-          identificaciontitular: identificacionTitular || null,
-          correotitular: correoTitular || null,
-          identificacioncliente: identificacionTitular || null,
-          nombrecliente: nombreTitular || null
-        };
-      });
+      setConsultaResponse(resultado);
+      setUserData(prev => ({ ...prev, nombrecliente: resultado.nombre || prev?.nombrecliente }));
 
-      // Calcular comisión (puede ser específica para servicios o usar una genérica)
-      const comision = Number(userData?.comisiones?.pagoServicio?.administracionCanal || 0) +
-        Number(userData?.comisiones?.pagoServicio?.agente || 0) +
-        Number(userData?.comisiones?.pagoServicio?.cooperativa || 0);
-
-      router.push({
-        pathname: '/otpverificacion',
-        params: {
-          monto: valorDelRecibo.toString(),
-          comision: comision,
-          total: Number(valorDelRecibo) + Number(comision),
-          labelTransaccion: menuLabel,
-          accionTransaccion: menuAccion,
-          otpCliente: userData?.jsonNegocio?.pagoServicio?.validarOtpCliente ?? false,
-          otpAgente: userData?.jsonNegocio?.pagoServicio?.validarOtpAgente ?? false
+      if (tipoPago === 'T') {
+        const vt = (resultado.valorTotal ?? resultado.valortotal ?? '0').trim();
+        if (vt === '0' || Number(vt) === 0) {
+          mostrarError('Error', 'No existe pago');
+          return;
         }
-      });
+        const datosTotal = buildDatosPagoServicioFromConsulta(resultado, Number(vt), resultado.rubros || []);
+        setDatosPagoServicio(datosTotal);
+        navegarAOtpPagoServicio(datosTotal, resultado);
+        return;
+      }
+      if (tipoPago === 'P') {
+        const datosParcial = buildDatosPagoServicioFromConsulta(resultado, 0, []);
+        setDatosPagoServicio(datosParcial);
+        setRubrosSeleccionadosHasta(-1);
+        setMostrarModalRubros(true);
+        return;
+      }
+      if (tipoPago === 'A') {
+        const valorTotal = Number(resultado.valorTotal ?? resultado.valortotal ?? 0);
+        setFormInputs(prev => ({ ...prev, valorAbono: String(valorTotal) }));
+        setTituloBoton('Siguiente');
+        const datosAbono = buildDatosPagoServicioFromConsulta(resultado, 0, resultado.rubros || []);
+        setDatosPagoServicio(datosAbono);
+        return;
+      }
+
+      mostrarError('Error', 'Tipo de pago no soportado');
     } catch (error) {
-      console.error('Error en handleContinuar:', error);
-      mostrarError('Error', error.message || 'Ocurrió un error al procesar el pago');
+      console.error('Error en obtenerDetalleConsulta:', error);
+      mostrarError('Error', error.message || 'Error al consultar');
     } finally {
       setLoading(false);
     }
@@ -127,26 +262,49 @@ export default function PagoServicioScreen() {
 
   const [error, setError] = useState('');
 
-  // Función para ver detalles del servicio
+  // Reset estado de consulta, datosPagoServicio y recarga al cambiar servicio o producto
+  useEffect(() => {
+    setConsultaResponse(null);
+    setTituloBoton('Consultar');
+    setDatosPagoServicio(null);
+    setRecargaSeleccionada('');
+  }, [servicioSeleccionado, productoSeleccionado]);
+
+  // Cargar la acción del menú seleccionada (misma lógica que DatosTransaccionScreen)
+  useEffect(() => {
+    const loadMenuAction = async () => {
+      try {
+        const accion = await AsyncStorage.getItem('selectedMenuAccion');
+        const label = await AsyncStorage.getItem('selectedMenuLabel');
+        if (accion) setMenuAccion(accion);
+        if (label) setMenuLabel(label);
+      } catch (error) {
+        console.error('Error al cargar la acción del menú:', error);
+      }
+    };
+    loadMenuAction();
+  }, []);
+
+  // Función para ver detalles del servicio (usa consultaServicio - OpenAPI)
   const handleVerDetalles = async () => {
     if (!servicioSeleccionado) {
       mostrarError('Error', 'Por favor seleccione un servicio');
       return;
     }
-
-    if (!numeroContrato) {
-      mostrarError('Error', 'Por favor ingrese el número de contrato o cuenta');
+    const ref = (formInputs.referencia || '').trim();
+    if (!ref) {
+      mostrarError('Error', 'Ingrese la referencia / código para pago');
       return;
     }
 
     setCargandoDetalles(true);
     setDetallesServicio(null);
-    
     try {
-      const resultado = await ApiService.devuelveDetalleDelServicio({
-        usuario: userData?.usuario,
-        idServicio: servicioSeleccionado,
-        valor: numeroContrato
+      const idProducto = productoSeleccionado || servicioSeleccionado;
+      const resultado = await ApiService.consultaServicio({
+        idProducto,
+        referencia: ref,
+        usuario: userData?.usuario
       });
       
       console.log('Detalles del servicio obtenidos:', resultado);
@@ -308,170 +466,74 @@ export default function PagoServicioScreen() {
     loadMenuAction();
   }, []);
 
+  // Cargar servicios al montar la pantalla (obtenerServicios - OpenAPI)
+  useEffect(() => {
+    if (!userData?.usuario) return;
 
-  // Buscar servicios por texto (al presionar BUSCAR SERVICIO)
-  const handleBuscarServicio = async () => {
-    const criterio = (textoBusquedaServicio || '').trim();
-    if (!criterio) {
-      mostrarAdvertencia('Búsqueda vacía', 'Ingrese un criterio para buscar el servicio');
-      return;
-    }
-    if (!userData?.usuario) {
-      mostrarError('Error', 'No hay sesión de usuario');
-      return;
-    }
-    setCargandoServicios(true);
-    setServicios([]);
-    setServicioSeleccionado('');
-    try {
-      const resultado = await ApiService.devuelveServiciosPorCategoria({
-        usuario: userData.usuario,
-        nombreCategoria: criterio
-      });
-      if (resultado?.servicios && Array.isArray(resultado.servicios)) {
-        setServicios(resultado.servicios);
-        if (resultado.servicios.length > 0) {
-          setServicioSeleccionado(resultado.servicios[0].id || '');
-        } else {
-          mostrarInfo('Sin resultados', 'No se encontraron servicios con ese criterio');
-        }
-      } else {
-        setServicios([]);
-        mostrarInfo('Sin resultados', 'No se encontraron servicios con ese criterio');
-      }
-    } catch (error) {
-      console.error('Error al buscar servicios:', error);
+    const cargarServicios = async () => {
+      setCargandoServicios(true);
       setServicios([]);
       setServicioSeleccionado('');
-      mostrarError('Error', error.message || 'No se pudieron buscar los servicios');
-    } finally {
-      setCargandoServicios(false);
-    }
-  };
-
-  // Función para consultar y cargar recibos
-  const handleConsultarRecibos = async () => {
-    if (!servicioSeleccionado) {
-      mostrarError('Error', 'Por favor seleccione un servicio');
-      return;
-    }
-
-    if (!numeroContrato) {
-      mostrarError('Error', 'Por favor ingrese el número de contrato o cuenta');
-      return;
-    }
-
-    setCargandoRecibos(true);
-    setRecibos([]);
-    setReciboSeleccionado('');
-    setRecibosConDetalles(new Map());
-
-    try {
-      console.log('Consultando recibos con:', {
-        idProducto: servicioSeleccionado,
-        referencia: numeroContrato,
-        usuario: userData?.usuario
-      });
-
-      // Intentar primero con consultaServicio
-      let resultado;
       try {
-        resultado = await ApiService.consultaServicio({
-          idProducto: servicioSeleccionado,
-          referencia: numeroContrato,
-          usuario: userData?.usuario
-        });
-        console.log('Respuesta de consultaServicio:', JSON.stringify(resultado, null, 2));
-      } catch (consultaError) {
-        console.log('Error en consultaServicio, intentando con devuelveDetalleDelServicio:', consultaError);
-        // Si consultaServicio falla, intentar con devuelveDetalleDelServicio
-        resultado = await ApiService.devuelveDetalleDelServicio({
-          usuario: userData?.usuario,
-          idServicio: servicioSeleccionado,
-          valor: numeroContrato
-        });
-        console.log('Respuesta de devuelveDetalleDelServicio:', JSON.stringify(resultado, null, 2));
-      }
-      
-      // Intentar diferentes estructuras de respuesta
-      let recibosData = [];
-      
-      // Buscar arrays en diferentes niveles
-      if (resultado?.recibos && Array.isArray(resultado.recibos)) {
-        recibosData = resultado.recibos;
-      } else if (resultado?.data && Array.isArray(resultado.data)) {
-        recibosData = resultado.data;
-      } else if (resultado?.items && Array.isArray(resultado.items)) {
-        recibosData = resultado.items;
-      } else if (resultado?.lista && Array.isArray(resultado.lista)) {
-        recibosData = resultado.lista;
-      } else if (resultado?.listado && Array.isArray(resultado.listado)) {
-        recibosData = resultado.listado;
-      } else if (Array.isArray(resultado)) {
-        recibosData = resultado;
-      } else if (resultado && typeof resultado === 'object') {
-        // Buscar propiedades que puedan ser arrays
-        const keys = Object.keys(resultado);
-        for (const key of keys) {
-          if (Array.isArray(resultado[key]) && resultado[key].length > 0) {
-            recibosData = resultado[key];
-            console.log(`Encontrado array en propiedad: ${key}`);
-            break;
-          }
+        const resultado = await ApiService.obtenerServicios({ usuario: userData.usuario });
+        const lista = resultado?.servicios && Array.isArray(resultado.servicios) ? resultado.servicios : [];
+        setServicios(lista);
+        if (lista.length > 0) {
+          setServicioSeleccionado(String(lista[0].servicio ?? ''));
         }
-        
-        // Si no se encontró ningún array, convertir el objeto en array
-        if (recibosData.length === 0) {
-          recibosData = [resultado];
-        }
+      } catch (error) {
+        console.error('Error al cargar servicios:', error);
+        setServicios([]);
+        mostrarError('Error', error.message || 'No se pudieron cargar los servicios');
+      } finally {
+        setCargandoServicios(false);
       }
-      
-      console.log('Recibos procesados:', recibosData);
-      console.log('Cantidad de recibos:', recibosData.length);
-      
-      // Almacenar los recibos con sus detalles en un Map
-      const recibosMap = new Map();
-      recibosData.forEach((recibo, index) => {
-        const reciboId = recibo.id || recibo.referencia || recibo.numero || recibo.codigo || `recibo-${index}`;
-        // Almacenar el recibo completo con sus datos
-        recibosMap.set(reciboId, {
-          ...recibo,
-          detalles: recibo // Los detalles pueden estar en el mismo objeto o se obtendrán después
-        });
-      });
-      
-      setRecibosConDetalles(recibosMap);
-      setRecibos(recibosData);
-      
-      if (recibosData.length > 0) {
-        // Usar el primer recibo como seleccionado por defecto
-        const primerRecibo = recibosData[0];
-        const reciboId = primerRecibo.id || primerRecibo.referencia || primerRecibo.numero || primerRecibo.codigo || `recibo-0`;
-        setReciboSeleccionado(reciboId);
-        console.log('Recibo seleccionado automáticamente:', reciboId);
-      } else {
-        console.warn('No se encontraron recibos en la respuesta');
-        mostrarInfo('Información', 'No se encontraron recibos para los datos ingresados');
-      }
-    } catch (error) {
-      console.error('Error al consultar recibos:', error);
-      console.error('Detalles del error:', error.message, error.stack);
-      mostrarError('Error', 'No se pudieron cargar los recibos: ' + (error.message || 'Error desconocido'));
-      setRecibos([]);
-      setRecibosConDetalles(new Map());
-    } finally {
-      setCargandoRecibos(false);
-    }
-  };
+    };
 
-  // Función para manejar la selección de recibo (solo actualiza el estado)
-  const handleSeleccionarRecibo = (reciboId) => {
-    if (!reciboId) {
-      setReciboSeleccionado('');
+    cargarServicios();
+  }, [userData?.usuario]);
+
+  // Cargar productos cuando cambia el servicio seleccionado (obtenerProductos - OpenAPI)
+  useEffect(() => {
+    if (!servicioSeleccionado || !userData?.usuario) {
+      setProductos([]);
+      setProductoSeleccionado('');
       return;
     }
-    setReciboSeleccionado(reciboId);
-  };
+
+    const servicioObj = servicios.find(s =>
+      String(s.servicio) === String(servicioSeleccionado)
+    );
+
+    const cargarProductos = async () => {
+      setCargandoProductos(true);
+      setProductos([]);
+      setProductoSeleccionado('');
+      try {
+        const resultado = await ApiService.obtenerProductos({
+          idGrupo: servicioObj?.idGrupo,
+          servicio: servicioObj?.servicio != null && servicioObj.servicio !== '' ? String(servicioObj.servicio) : undefined,
+          usuario: userData.usuario
+        });
+        const lista = (resultado?.productos && Array.isArray(resultado.productos))
+          ? resultado.productos
+          : [];
+        setProductos(lista);
+        if (lista.length > 0) {
+          const primerId = lista[0].idProducto || lista[0].id || '';
+          setProductoSeleccionado(primerId);
+        }
+      } catch (error) {
+        console.error('Error al cargar productos:', error);
+        setProductos([]);
+        mostrarError('Error', error.message || 'No se pudieron cargar los productos');
+      } finally {
+        setCargandoProductos(false);
+      }
+    };
+
+    cargarProductos();
+  }, [servicioSeleccionado, userData?.usuario]);
 
   const handleLogout = async () => {
     setUserData(null);
@@ -492,7 +554,7 @@ export default function PagoServicioScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient
-        colors={['#2B4F8C', '#1e3a5f']}
+        colors={['#325191', '#38599E']}
         style={styles.gradient}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
@@ -522,185 +584,192 @@ export default function PagoServicioScreen() {
               <Text style={styles.instruction}>
                 {'Seleccione los datos para el pago'}
               </Text>
-              <Text style={styles.label}>Buscar servicio</Text>
-              <TextInput
-                style={styles.input}
-                value={textoBusquedaServicio}
-                onChangeText={(text) => setTextoBusquedaServicio((text || '').toUpperCase())}
-                placeholder="Ingrese nombre o criterio del servicio"
-                placeholderTextColor="#999"
-                editable={!cargandoServicios}
-                autoCapitalize="characters"
-              />
-              <TouchableOpacity
-                style={[styles.buscarServicioButton, cargandoServicios && styles.detailsButtonDisabled]}
-                disabled={cargandoServicios}
-                onPress={handleBuscarServicio}
-              >
-                {cargandoServicios ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.buscarServicioButtonText}>BUSCAR SERVICIO</Text>
-                )}
-              </TouchableOpacity>
 
-              {servicios.length > 0 && (
+              <Text style={styles.label}>Servicio</Text>
+              {cargandoServicios ? (
+                <View style={styles.pickerContainer}>
+                  <ActivityIndicator size="small" color="#2957a4" style={styles.loadingIndicator} />
+                  <Text style={styles.loadingText}>Cargando servicios...</Text>
+                </View>
+              ) : (
+                <View style={styles.pickerContainer}>
+                  <Picker
+                    selectedValue={servicioSeleccionado}
+                    onValueChange={(itemValue) => {
+                      setServicioSeleccionado(itemValue);
+                      setProductos([]);
+                      setProductoSeleccionado('');
+                    }}
+                    style={styles.picker}
+                    dropdownIconColor="#000"
+                    prompt="Seleccione un servicio"
+                  >
+                    <Picker.Item label="Seleccione un servicio" value="" />
+                    {servicios.map((servicio) => (
+                      <Picker.Item
+                        key={String(servicio.servicio)}
+                        label={servicio.nombre}
+                        value={String(servicio.servicio ?? '')}
+                      />
+                    ))}
+                  </Picker>
+                </View>
+              )}
+
+              {/* Combo de productos (se carga al seleccionar servicio) */}
+              {servicioSeleccionado && (
                 <>
-                  <Text style={styles.label}>Servicios</Text>
-                  <View style={styles.pickerContainer}>
-                    <Picker
-                      selectedValue={servicioSeleccionado}
-                      onValueChange={(itemValue) => setServicioSeleccionado(itemValue)}
-                      style={styles.picker}
-                      dropdownIconColor="#000"
-                    >
-                      {servicios.map((servicio) => (
-                        <Picker.Item
-                          key={servicio.id}
-                          label={servicio.nombre || 'Sin nombre'}
-                          value={servicio.id || ''}
-                        />
-                      ))}
-                    </Picker>
-                  </View>
+                  <Text style={styles.label}>Producto</Text>
+                  {cargandoProductos ? (
+                    <View style={styles.pickerContainer}>
+                      <ActivityIndicator size="small" color="#2957a4" style={styles.loadingIndicator} />
+                      <Text style={styles.loadingText}>Cargando productos...</Text>
+                    </View>
+                  ) : (
+                    <View style={styles.pickerContainer}>
+                      <Picker
+                        selectedValue={productoSeleccionado}
+                        onValueChange={(itemValue) => setProductoSeleccionado(itemValue)}
+                        style={styles.picker}
+                        dropdownIconColor="#000"
+                        prompt="Seleccione un producto"
+                      >
+                        <Picker.Item label="Seleccione un producto" value="" />
+                        {productos.map((producto) => {
+                          const idProd = producto.idProducto || producto.id || '';
+                          const nombreProd = producto.nombre || 'Sin nombre';
+                          return (
+                            <Picker.Item
+                              key={idProd}
+                              label={nombreProd}
+                              value={idProd}
+                            />
+                          );
+                        })}
+                      </Picker>
+                    </View>
+                  )}
                 </>
               )}
 
-              {/* Información del servicio seleccionado */}
+              {/* Datos de pago */}
               {servicioSeleccionado && (
-                      <View style={styles.serviceDetails}>
-                        <Text style={styles.label}>Número de Contrato/Cuenta:</Text>
-                        <TextInput
-                          style={styles.input}
-                          value={numeroContrato}
-                          onChangeText={setNumeroContrato}
-                          placeholder="Ingrese el número de contrato o cuenta"
-                          keyboardType="default"
-                        />
+                <View style={styles.serviceDetails}>
+                  <>
+                    <Text style={styles.label}>Referencia / Código para pago</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={formInputs.referencia}
+                      onChangeText={(t) => setFormInputs(prev => ({ ...prev, referencia: t }))}
+                      placeholder="Ingrese referencia o código de pago"
+                      keyboardType="default"
+                    />
+                  </>
 
-                  <Text style={styles.label}>Identificación del Titular:</Text>
-                            <TextInput
-                    style={styles.input}
-                    value={identificacionTitular}
-                    onChangeText={setIdentificacionTitular}
-                    placeholder="Ingrese la identificación del titular"
-                    keyboardType="default"
-                  />
-                  
-                  <Text style={styles.label}>Correo del Titular:</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={correoTitular}
-                    onChangeText={setCorreoTitular}
-                    placeholder="Ingrese el correo del titular"
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                  />
-                  
-                  {/* Botón Consultar Recibos */}
-                          <TouchableOpacity
-                    style={[
-                      styles.detailsButton,
-                      (!numeroContrato || cargandoRecibos) && styles.detailsButtonDisabled
-                    ]}
-                    disabled={!numeroContrato || cargandoRecibos}
-                    onPress={handleConsultarRecibos}
-                  >
-                    {cargandoRecibos ? (
-                      <ActivityIndicator size="small" color="#FFFFFF" />
-                    ) : (
-                      <Text style={styles.detailsButtonText}>CONSULTAR</Text>
-                    )}
-                          </TouchableOpacity>
-
-                  {/* Combo de Recibos */}
-                  {numeroContrato && (
+                  {!tieneConsulta && valoresRecarga.length > 0 && (
                     <>
-                      <Text style={styles.label}>Recibos</Text>
+                      <Text style={styles.label}>Valor de recarga</Text>
                       <View style={styles.pickerContainer}>
-                        {cargandoRecibos ? (
-                          <ActivityIndicator size="small" color="#2957a4" style={styles.loadingIndicator} />
-                        ) : (
-                          <Picker
-                            selectedValue={reciboSeleccionado}
-                            onValueChange={(itemValue) => handleSeleccionarRecibo(itemValue)}
-                            style={styles.picker}
-                            dropdownIconColor="#000"
-                            enabled={recibos.length > 0}
-                          >
-                            {recibos.length > 0 ? (
-                              recibos.map((recibo, index) => {
-                                const reciboId = recibo.id || recibo.referencia || recibo.numero || recibo.codigo || `recibo-${index}`;
-                                const reciboLabel = recibo.descripcion || recibo.nombre || recibo.referencia || recibo.numero || `Recibo ${index + 1}`;                                
-                                const fechaVencimientoLabel = recibo.fechaVencimiento ? recibo.fechaVencimiento.split('T')[0] : null;
-                                return (
-                                  <Picker.Item
-                                    key={reciboId}
-                                    label={reciboLabel + (fechaVencimientoLabel ? ' - ' + fechaVencimientoLabel : '')}
-                                    value={reciboId}
-                                  />
-                                );
-                              })
-                            ) : (
-                              <Picker.Item label="No hay recibos disponibles" value="" />
-                            )}
-                          </Picker>
-                        )}
-                        </View>
-
-                      {/* Información del recibo seleccionado */}
-                      {reciboSeleccionado && recibos.length > 0 && (() => {
-                        const reciboSeleccionadoObj = recibos.find(r => {
-                          const id = r.id || r.referencia || r.numero || r.codigo;
-                          return id === reciboSeleccionado;
-                        });
-                        const reciboDetalles = recibosConDetalles.get(reciboSeleccionado);
-                        const reciboInfo = reciboDetalles || reciboSeleccionadoObj;
-                        
-                        // Obtener monto desde importes si existe, o desde el objeto directamente
-                        let monto = null;
-                        if (reciboInfo?.importes && Array.isArray(reciboInfo.importes) && reciboInfo.importes.length > 0) {
-                          const totalImportes = reciboInfo.importes.reduce((sum, imp) => {
-                            const valor = imp.valorImporte?.monto || imp.monto || imp.valor || 0;
-                            return sum + Number(valor);
-                          }, 0);
-                          monto = totalImportes > 0 ? totalImportes : null;
-                        } else if (reciboInfo?.monto) {
-                          monto = reciboInfo.monto;
-                        } else if (reciboInfo?.valor) {
-                          monto = reciboInfo.valor;
-                        }
-                        
-                        const fechaVencimiento = reciboInfo?.fechaVencimiento ? reciboInfo.fechaVencimiento.split('T')[0] : null;
-                        
-                        return (monto || fechaVencimiento) ? (
-                          <View style={styles.reciboInfoContainer}>
-                            {monto && (
-                              <View style={styles.reciboInfoRow}>
-                                <Text style={styles.reciboInfoLabel}>Monto:</Text>
-                                <Text style={styles.reciboInfoValue}>S/{parseFloat(monto).toFixed(2)}</Text>
+                        <Picker
+                          selectedValue={recargaSeleccionada}
+                          onValueChange={setRecargaSeleccionada}
+                          style={styles.picker}
+                          dropdownIconColor="#000"
+                          prompt="Seleccione valor de recarga"
+                        >
+                          <Picker.Item label="Seleccione valor de recarga" value="" />
+                          {valoresRecarga.map((v, i) => {
+                            const val = v.Valor ?? v.valor ?? v.monto ?? v.id ?? v;
+                            const label = v.nombre ?? v.label ?? `$${Number(val).toFixed(2)}`;
+                            return <Picker.Item key={i} label={label} value={String(val)} />;
+                          })}
+                        </Picker>
                       </View>
-                    )}
-                            {fechaVencimiento && (
-                              <View style={styles.reciboInfoRow}>
-                                <Text style={styles.reciboInfoLabel}>Fecha Vencimiento:</Text>
-                                <Text style={styles.reciboInfoValue}>{fechaVencimiento}</Text>
-                  </View>
-                            )}
-                </View>
-                        ) : null;
-                      })()}
+                    </>
+                  )}
+                  {!tieneConsulta && valoresRecarga.length === 0 && productoObj && (
+                    <>
+                      <Text style={styles.label}>Valor recarga</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={formInputs.valorRecarga}
+                        onChangeText={(t) => setFormInputs(prev => ({ ...prev, valorRecarga: t }))}
+                        placeholder="Valor a recargar"
+                        keyboardType="decimal-pad"
+                      />
+                    </>
+                  )}
 
+                  {(productoObj?.requierePensionAlimenticia || productoObj?.codigoPension) && (
+                    <>
+                      <Text style={styles.label}>Código pensión empresa</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={formInputs.codigoPensionAlimenticia}
+                        onChangeText={(t) => setFormInputs(prev => ({ ...prev, codigoPensionAlimenticia: t }))}
+                        placeholder="Código pensión (si aplica)"
+                        keyboardType="default"
+                      />
+                      <Text style={styles.label}>Número cuotas pensión</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={formInputs.numeroCuotasPensionAlimenticia}
+                        onChangeText={(t) => setFormInputs(prev => ({ ...prev, numeroCuotasPensionAlimenticia: t }))}
+                        placeholder="0 si no aplica"
+                        keyboardType="number-pad"
+                      />
+                    </>
+                  )}
+                  {(productoObj?.requiereTonelaje || productoObj?.valorTonelaje) && (
+                    <>
+                      <Text style={styles.label}>Valor tonelaje</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={formInputs.valorTonelaje}
+                        onChangeText={(t) => setFormInputs(prev => ({ ...prev, valorTonelaje: t }))}
+                        placeholder="Valor tonelaje (si aplica)"
+                        keyboardType="decimal-pad"
+                      />
+                    </>
+                  )}
+
+                  {tieneConsulta && tipoPago === 'A' && consultaResponse && (
+                    <>
+                      <Text style={styles.valorTotalText}>
+                        El valor a pagar es de: ${Number(consultaResponse.valorTotal ?? consultaResponse.valortotal ?? 0).toFixed(2)}
+                      </Text>
+                      <Text style={styles.label}>Abono</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={formInputs.valorAbono}
+                        onChangeText={(t) => setFormInputs(prev => ({ ...prev, valorAbono: t }))}
+                        placeholder="Ingrese valor del abono"
+                        keyboardType="decimal-pad"
+                      />
                     </>
                   )}
 
                   <View style={styles.inputContainer}>
                     <TouchableOpacity
-                      style={[styles.continueButton, !numeroContrato && styles.continueButtonDisabled]}
-                      disabled={!numeroContrato}
-                      onPress={() => handleContinuar()}
+                      style={[
+                        styles.continueButton,
+                        (loading ||
+                          ((tieneConsulta || valoresRecarga.length === 0) && !formInputs.referencia.trim()) ||
+                          (!tieneConsulta && valoresRecarga.length > 0 && (!recargaSeleccionada || !formInputs.referencia.trim()))
+                        ) && styles.continueButtonDisabled
+                      ]}
+                      disabled={
+                        loading ||
+                        ((tieneConsulta || valoresRecarga.length === 0) && !formInputs.referencia.trim()) ||
+                        (!tieneConsulta && valoresRecarga.length > 0 && (!recargaSeleccionada || !formInputs.referencia.trim()))
+                      }
+                      onPress={handleConsultarOSiguiente}
                     >
-                      <Text style={styles.continueButtonText}>CONTINUAR</Text>
+                      {loading ? (
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                      ) : (
+                        <Text style={styles.continueButtonText}>{(!tieneConsulta && valoresRecarga.length > 0) ? 'SIGUIENTE' : tituloBoton.toUpperCase()}</Text>
+                      )}
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -718,6 +787,107 @@ export default function PagoServicioScreen() {
         buttonText={modalData.buttonText}
         onClose={cerrarModal}
       />
+
+      {/* Modal pago parcial: elegir rubro */}
+      <Modal
+        visible={mostrarModalRubros}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setMostrarModalRubros(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Rubro (pago parcial)</Text>
+              <TouchableOpacity
+                onPress={() => setMostrarModalRubros(false)}
+                style={styles.modalCloseButton}
+              >
+                <Text style={styles.modalCloseButtonText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView
+              style={styles.modalBody}
+              contentContainerStyle={{ padding: 16, flexGrow: 1 }}
+              showsVerticalScrollIndicator={true}
+            >
+              {(consultaResponse?.rubros && consultaResponse.rubros.length > 0) ? (
+                <>                                    
+                  <Text style={styles.modalRubroLabel}>Valor a pagar:</Text>
+                  <Text style={styles.modalRubroMonto}>
+                    $
+                    {rubrosSeleccionadosHasta < 0
+                      ? '0.00'
+                      : consultaResponse.rubros
+                          .slice(0, rubrosSeleccionadosHasta + 1)
+                          .reduce((sum, r) => sum + Number(r.valorPagado ?? 0), 0)
+                          .toFixed(2)}
+                  </Text>
+                  {consultaResponse.rubros.map((rubro, index) => {
+                    const valor = Number(rubro.valorPagado || 0);
+                    // Regla: en pago parcial solo se permite escoger el primer rubro.
+                    const isSelected = rubrosSeleccionadosHasta === 0 && index === 0;
+                    const isDisabled = index !== 0;
+                    return (
+                      <TouchableOpacity
+                        key={rubro.idPago || `rubro-${index}`}
+                        style={[
+                          styles.modalRubroRow,
+                          isSelected && styles.modalRubroRowSelected,
+                          isDisabled && styles.modalRubroRowDisabled
+                        ]}
+                        disabled={isDisabled}
+                        onPress={() => {
+                          if (index !== 0) return;
+                          setRubrosSeleccionadosHasta(isSelected ? -1 : 0);
+                        }}
+                      >
+                        <View style={styles.modalRubroRowLeft}>
+                          <View style={[styles.modalRubroCheck, isSelected && styles.modalRubroCheckSelected]}>
+                            {isSelected && <Text style={styles.modalRubroCheckText}>✓</Text>}
+                          </View>
+                          <View>
+                            <Text style={styles.modalRubroPrioridad}>
+                              Prioridad {rubro.prioridad != null ? rubro.prioridad : index + 1}
+                            </Text>
+                            {rubro.periodo != null && (
+                              <Text style={styles.modalRubroPeriodo}>{rubro.periodo}</Text>
+                            )}
+                          </View>
+                        </View>
+                        <Text style={styles.modalRubroValor}>${valor.toFixed(2)}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                  <TouchableOpacity
+                    style={[
+                      styles.modalRubroSiguiente,
+                      rubrosSeleccionadosHasta < 0 && styles.modalRubroSiguienteDisabled
+                    ]}
+                    disabled={rubrosSeleccionadosHasta < 0}
+                    onPress={() => {
+                      if (rubrosSeleccionadosHasta < 0 || !datosPagoServicio) return;
+                      setMostrarModalRubros(false);
+                      const rubrosElegidos = consultaResponse.rubros.slice(0, rubrosSeleccionadosHasta + 1);
+                      const valorPago = rubrosElegidos.reduce(
+                        (sum, r) => sum + Number(r.valorPagado || 0),
+                        0
+                      );
+                      const datosActualizados = { ...datosPagoServicio, valor: valorPago, rubros: rubrosElegidos };
+                      setDatosPagoServicio(datosActualizados);
+                      navegarAOtpPagoServicio(datosActualizados, consultaResponse);
+                    }}
+                  >
+                    <Text style={styles.modalRubroSiguienteText}>Siguiente</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <Text style={styles.modalEmptyText}>No hay rubros disponibles</Text>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       {/* Modal para mostrar detalles del servicio */}
       <Modal
@@ -944,6 +1114,18 @@ const styles = StyleSheet.create({
   loadingIndicator: {
     padding: 10,
   },
+  loadingText: {
+    fontSize: 14,
+    color: '#2B4F8C',
+    marginTop: 8,
+  },
+  valorTotalText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#2B4F8C',
+    marginTop: 12,
+    marginBottom: 8,
+  },
   detailsButton: {
     backgroundColor: '#2BAC6B',
     borderRadius: 5,
@@ -1061,6 +1243,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 10,
     width: '90%',
+    // En Android el modal puede colapsar si solo usamos maxHeight; damos altura real.
+    height: height * 0.8,
     maxHeight: '80%',
     elevation: 5,
     shadowColor: '#000',
@@ -1107,6 +1291,103 @@ const styles = StyleSheet.create({
     color: '#6c757d',
     textAlign: 'center',
     padding: 20,
+  },
+  modalRubroLabel: {
+    fontSize: 14,
+    color: '#2B4F8C',
+    marginTop: 8,
+    fontWeight: '600',
+  },
+  modalRubroMonto: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#2B4F8C',
+    marginBottom: 12,
+  },
+  modalRubroListTitle: {
+    fontSize: 14,
+    color: '#2B4F8C',
+    marginBottom: 4,
+    fontWeight: '600',
+  },
+  modalRubroHint: {
+    fontSize: 12,
+    color: '#6c757d',
+    marginBottom: 12,
+    fontStyle: 'italic',
+  },
+  modalRubroRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    marginBottom: 8,
+    backgroundColor: '#f0f4f8',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#dee2e6',
+  },
+  modalRubroRowSelected: {
+    borderColor: '#2957a4',
+    backgroundColor: '#e8eef7',
+  },
+  modalRubroRowDisabled: {
+    opacity: 0.6,
+  },
+  modalRubroRowLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  modalRubroCheck: {
+    width: 24,
+    height: 24,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: '#2957a4',
+    marginRight: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalRubroCheckSelected: {
+    backgroundColor: '#2957a4',
+  },
+  modalRubroCheckText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  modalRubroPrioridad: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+  },
+  modalRubroPeriodo: {
+    fontSize: 12,
+    color: '#666',
+    marginLeft: 8,
+  },
+  modalRubroValor: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#2B4F8C',
+  },
+  modalRubroSiguiente: {
+    marginTop: 20,
+    marginBottom: 16,
+    backgroundColor: '#2957a4',
+    padding: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  modalRubroSiguienteDisabled: {
+    backgroundColor: '#A0AEC0',
+    opacity: 0.8,
+  },
+  modalRubroSiguienteText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
   reciboInfoContainer: {
     marginTop: 10,

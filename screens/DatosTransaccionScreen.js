@@ -24,7 +24,6 @@ export default function DatosTransaccionScreen() {
   const [loading, setLoading] = useState(false);
   const [cargandoCuentas, setCargandoCuentas] = useState(false);
   const [valorTransaccion, setValorTransaccion] = useState('');
-  const [observacionDeposito, setObservacionDeposito] = useState('');
   const [menuLabel, setMenuLabel] = useState('');
   const [menuAccion, setMenuAccion] = useState('');
 
@@ -45,9 +44,6 @@ export default function DatosTransaccionScreen() {
         nombrecliente: cliente.nombres + ' ' + cliente.apellidos,
         identificacioncliente: cliente.identificacion
       };
-      if (menuAccion === 'deposito') {
-        transaccionData.observacionDeposito = (observacionDeposito || '').trim();
-      }
 
       setUserData(prevData => ({
         ...prevData,
@@ -71,11 +67,11 @@ export default function DatosTransaccionScreen() {
        
         if (typeof response === 'object' && response !== null) {
           console.log('Tipos de transacciones:', response);
-          if(response.saldoCaja < Number(valorTransaccion)) {
+          /*if(response.saldoCaja < Number(valorTransaccion)) {
             mostrarAdvertencia('Saldo insuficiente', 'El saldo en caja es menor al valor de la transacción.');
             setLoading(false);
             return;
-          }
+          }*/
         } else {          
           mostrarError('Error', 'Error al obtener el saldo en caja. Por favor intente nuevamente.');
           setLoading(false);
@@ -343,7 +339,7 @@ export default function DatosTransaccionScreen() {
                   <Text style={styles.resultTitle}>Datos del Socio</Text>
                   <View style={styles.resultRow}>
                     <Text style={styles.resultLabel}>Nombre: </Text>
-                    <Text style={styles.resultValue}>{cliente.nombres + cliente.apellidos || 'No disponible'}</Text>
+                    <Text style={styles.resultValue}>{((cliente.nombres || '') + ' ' + (cliente.apellidos || '')).trim() || 'No disponible'}</Text>
                   </View>
                   {cliente.telefono && (
                     <View style={styles.resultRow}>
@@ -382,6 +378,14 @@ export default function DatosTransaccionScreen() {
                                   {cuenta.tipoCuentaNombre || ''} · {cuenta.monedaNombre || ''}
                                 </Text>
                               </View>
+                              {(cuenta.disponibleParaTransaccion != null || cuenta.saldo != null) && (
+                                <View style={styles.accountListItemRow}>
+                                  <Text style={styles.accountListLabel}>Saldo: </Text>
+                                  <Text style={[styles.accountListValue, isSelected && styles.accountListItemSelectedText]}>
+                                    ${Number(cuenta.disponibleParaTransaccion ?? cuenta.saldo ?? 0).toFixed(2)}
+                                  </Text>
+                                </View>
+                              )}
                               {cuenta.tipoRegistroFirma != null && cuenta.tipoRegistroFirma !== '' && (
                                 <View style={styles.accountListItemRow}>
                                   <Text style={styles.accountListLabel}>Registro: </Text>
@@ -402,29 +406,13 @@ export default function DatosTransaccionScreen() {
                       <View style={styles.accountDetails}>
                         
                         {/*<Text style={styles.accountDetailText}>
-                          Saldo disponible: S/{cuentas.find(c => String(c.secuencialCuenta) === cuentaSeleccionada)?.disponibleParaTransaccion?.toFixed(2) || '0.00'}
+                          Saldo disponible: ${cuentas.find(c => String(c.secuencialCuenta) === cuentaSeleccionada)?.disponibleParaTransaccion?.toFixed(2) || '0.00'}
                         </Text>*/}
-                        
-                        {menuAccion === 'deposito' && (
-                          <View style={styles.inputContainer}>
-                            <Text style={styles.label}>Observación (opcional)</Text>
-                            <TextInput
-                              style={styles.observacionInput}
-                              placeholder="Ej: Jairo Maldonado Rivas"
-                              placeholderTextColor="#999"
-                              value={observacionDeposito}
-                              onChangeText={setObservacionDeposito}
-                              multiline
-                              numberOfLines={2}
-                              maxLength={200}
-                            />
-                          </View>
-                        )}
                         
                         <View style={styles.inputContainer}>
                           <Text style={styles.label}>Valor de la transacción</Text>
                           <View style={styles.currencyInputContainer}>
-                            <Text style={styles.currencySymbol}>S/</Text>
+                            <Text style={styles.currencySymbol}>$</Text>
                             <TextInput
                               style={styles.currencyInput}
                               keyboardType="numeric"
@@ -642,16 +630,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: '#2B4F8C',
     fontWeight: 'bold',
-  },
-  observacionInput: {
-    borderWidth: 1,
-    borderColor: '#DDD',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    backgroundColor: '#FFF',
-    minHeight: 72,
-    textAlignVertical: 'top',
   },
   label: {
     fontSize: 14,

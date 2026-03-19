@@ -1,8 +1,8 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import * as Sharing from 'expo-sharing';
 import React, { useRef, useState } from 'react';
 import { ActivityIndicator, Dimensions, FlatList, Image, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,7 +12,7 @@ import { globalStyles } from '../styles/globalStyles';
 
 export default function ComprobanteScreen() {
   const router = useRouter();
-  const { monto, comision, total, referencia, fecha, labelTransaccion, nombreSocio, numeroCuenta, codigoOperacion, observacion, usuario, negocio, identificacionCliente } = useLocalSearchParams();
+  const { monto, comision, total, referencia, fecha, labelTransaccion, nombreSocio, numeroCuenta, codigoOperacion, observacion, usuario, negocio, identificacionCliente, productoNombre, referenciaCliente } = useLocalSearchParams();
   const insets = useSafeAreaInsets();
   const [imprimiendo, setImprimiendo] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
@@ -26,7 +26,25 @@ export default function ComprobanteScreen() {
   const [comprobanteParaImprimir, setComprobanteParaImprimir] = useState(null);
   const [modalErrorImpresionVisible, setModalErrorImpresionVisible] = useState(false);
   const [guardandoPdf, setGuardandoPdf] = useState(false);
+  const [tooltipLabel, setTooltipLabel] = useState(null);
+  const tooltipTimeoutRef = useRef(null);
   const seleccionDispositivoRef = useRef(null);
+
+  const showTooltip = (label) => {
+    if (tooltipTimeoutRef.current) clearTimeout(tooltipTimeoutRef.current);
+    setTooltipLabel(label);
+    tooltipTimeoutRef.current = setTimeout(() => {
+      setTooltipLabel(null);
+      tooltipTimeoutRef.current = null;
+    }, 1500);
+  };
+  const hideTooltip = () => {
+    if (tooltipTimeoutRef.current) {
+      clearTimeout(tooltipTimeoutRef.current);
+      tooltipTimeoutRef.current = null;
+    }
+    setTooltipLabel(null);
+  };
 
   const mostrarModal = (title, message, type = 'info') => {
     setModalData({ title, message, type });
@@ -181,7 +199,7 @@ export default function ComprobanteScreen() {
     rows.push(`<tr><td colspan="2" style="text-align:center;font-size:11px;">Operación realizada en su Asesor Virtual</td></tr>`);
     rows.push(`<tr><td colspan="2"><hr/></td></tr>`);
     rows.push(`<tr><td colspan="2" style="text-align:center;font-weight:bold;">${tipoLabel}</td></tr>`);
-    rows.push(`<tr><td colspan="2" style="text-align:center;font-size:16px;font-weight:bold;">S/ ${montoStr}</td></tr>`);
+    rows.push(`<tr><td colspan="2" style="text-align:center;font-size:16px;font-weight:bold;">$ ${montoStr}</td></tr>`);
     rows.push(`<tr><td colspan="2"><hr/></td></tr>`);
     rows.push(`<tr><td style="font-weight:bold;">Fecha y Hora:</td><td>${fechaHora}</td></tr>`);
     if (identificacionCliente != null && String(identificacionCliente).trim() !== '') {
@@ -189,6 +207,12 @@ export default function ComprobanteScreen() {
     }
     if (nombreSocio != null && String(nombreSocio).trim() !== '') {
       rows.push(`<tr><td style="font-weight:bold;">Nombre del Socio:</td><td>${String(nombreSocio).trim()}</td></tr>`);
+    }
+    if (productoNombre != null && String(productoNombre).trim() !== '') {
+      rows.push(`<tr><td style="font-weight:bold;">Producto:</td><td>${String(productoNombre).trim()}</td></tr>`);
+    }
+    if (referenciaCliente != null && String(referenciaCliente).trim() !== '') {
+      rows.push(`<tr><td style="font-weight:bold;">Referencia:</td><td>${String(referenciaCliente).trim()}</td></tr>`);
     }
     if (cuentaMask) rows.push(`<tr><td style="font-weight:bold;">N° de Cuenta:</td><td>${cuentaMask}</td></tr>`);
     rows.push(`<tr><td style="font-weight:bold;">Código Operación:</td><td>${codigoOp}</td></tr>`);
@@ -249,7 +273,7 @@ export default function ComprobanteScreen() {
   const estaticos = PrintService.COMPROBANTE_DATOS_ESTATICOS;
   const cuentaEnmascarada = numeroCuenta ? PrintService.enmascararNumeroCuenta(numeroCuenta) : '';
   const tipoLabel = (labelTransaccion || 'DEPOSITO EN CUENTA').toUpperCase();
-  const montoStr = `S/ ${(parseFloat(monto) || 0).toFixed(2)}`;
+  const montoStr = `$ ${(parseFloat(monto) || 0).toFixed(2)}`;
   const fechaHora = PrintService.normalizarFechaHora(fecha);
   const codigoOp = codigoOperacion || referencia || 'N/A';
   const observacionStr = observacion ? `:${observacion}` : '';
@@ -257,7 +281,7 @@ export default function ComprobanteScreen() {
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={['#2B4F8C', '#1e3a5f']}
+        colors={['#325191', '#38599E']}
         style={styles.gradient}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
@@ -309,6 +333,18 @@ export default function ComprobanteScreen() {
                 <Text style={styles.previewDetailValue} numberOfLines={2}>{nombreSocio}</Text>
               </View>
             ) : null}
+            {(productoNombre != null && String(productoNombre).trim() !== '') ? (
+              <View style={styles.previewDetailRow}>
+                <Text style={styles.previewDetailLabel}>Producto:</Text>
+                <Text style={styles.previewDetailValue} numberOfLines={2}>{productoNombre}</Text>
+              </View>
+            ) : null}
+            {(referenciaCliente != null && String(referenciaCliente).trim() !== '') ? (
+              <View style={styles.previewDetailRow}>
+                <Text style={styles.previewDetailLabel}>Referencia:</Text>
+                <Text style={styles.previewDetailValue} numberOfLines={2}>{referenciaCliente}</Text>
+              </View>
+            ) : null}
             {(cuentaEnmascarada != null && String(cuentaEnmascarada).trim() !== '') ? (
               <View style={styles.previewDetailRow}>
                 <Text style={styles.previewDetailLabel}>N° de Cuenta:</Text>
@@ -337,29 +373,55 @@ export default function ComprobanteScreen() {
             ) : null}
           </View>
 
-          <View style={styles.buttonContainer}>
-            <TouchableOpacity 
-              style={[styles.button, imprimiendo && styles.buttonDisabled]}
-              onPress={handleImprimir}
-              disabled={imprimiendo}
-            >
-              {imprimiendo ? (
-                <ActivityIndicator color="white" size="small" />
-              ) : (
-                <Text style={styles.buttonText}>IMPRIMIR</Text>
-              )}
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.button}
-              onPress={() => {
-                router.dismissAll();
-                router.replace('/menu');
-              }}
-              disabled={imprimiendo}
-            >
-              <Text style={styles.buttonText}>SALIR</Text>
-            </TouchableOpacity>
+          <View style={styles.buttonsWrapper}>
+            {tooltipLabel ? (
+              <View style={styles.tooltipBubble}>
+                <Text style={styles.tooltipText}>{tooltipLabel}</Text>
+              </View>
+            ) : null}
+            <View style={styles.buttonContainer}>
+              <TouchableOpacity
+                style={[styles.button, styles.buttonIcon, (guardandoPdf || imprimiendo) && styles.buttonDisabled]}
+                onPress={handleGuardarPdf}
+                onLongPress={() => showTooltip('Compartir')}
+                onPressOut={hideTooltip}
+                disabled={guardandoPdf || imprimiendo}
+                accessibilityLabel="Compartir comprobante como PDF"
+              >
+                {guardandoPdf ? (
+                  <ActivityIndicator color="white" size="small" />
+                ) : (
+                  <MaterialIcons name="share" size={28} color="#fff" />
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, styles.buttonIcon, imprimiendo && styles.buttonDisabled]}
+                onPress={handleImprimir}
+                onLongPress={() => showTooltip('Imprimir')}
+                onPressOut={hideTooltip}
+                disabled={imprimiendo}
+                accessibilityLabel="Imprimir"
+              >
+                {imprimiendo ? (
+                  <ActivityIndicator color="white" size="small" />
+                ) : (
+                  <MaterialIcons name="print" size={28} color="#fff" />
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, styles.buttonIcon, imprimiendo && styles.buttonDisabled]}
+                onPress={() => {
+                  router.dismissAll();
+                  router.replace('/menu');
+                }}
+                onLongPress={() => showTooltip('Salir')}
+                onPressOut={hideTooltip}
+                disabled={imprimiendo}
+                accessibilityLabel="Salir al menú"
+              >
+                <MaterialIcons name="exit-to-app" size={28} color="#fff" />
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
         </ScrollView>
@@ -383,7 +445,7 @@ export default function ComprobanteScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalErrorImpresionContainer}>
             <LinearGradient
-              colors={['#2B4F8C', '#1e3a5f']}
+              colors={['#325191', '#2a4580']}
               style={styles.modalErrorImpresionGradient}
               start={{ x: 0.5, y: 0 }}
               end={{ x: 0.5, y: 1 }}
@@ -430,7 +492,7 @@ export default function ComprobanteScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
             <LinearGradient
-              colors={['#2B4F8C', '#1e3a5f']}
+              colors={['#325191', '#2a4580']}
               style={styles.modalGradient}
               start={{ x: 0.5, y: 0 }}
               end={{ x: 0.5, y: 1 }}
@@ -618,11 +680,33 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     marginBottom: 4,
   },
+  buttonsWrapper: {
+    width: '100%',
+    marginTop: 20,
+    position: 'relative',
+  },
+  tooltipBubble: {
+    position: 'absolute',
+    bottom: '100%',
+    left: 0,
+    right: 0,
+    marginBottom: 8,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    maxWidth: 200,
+    alignSelf: 'center',
+  },
+  tooltipText: {
+    color: '#fff',
+    fontSize: 14,
+    textAlign: 'center',
+  },
   buttonContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     width: '100%',
-    marginTop: 20,
   },
   button: {
     flex: 1,
@@ -633,6 +717,9 @@ const styles = StyleSheet.create({
     marginHorizontal: 5,
     backgroundColor: '#2B4F8C',
     minHeight: 48,
+  },
+  buttonIcon: {
+    minWidth: 48,
   },
   buttonDisabled: {
     opacity: 0.6,

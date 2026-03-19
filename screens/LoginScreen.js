@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Device from 'expo-device';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import React, { useContext, useEffect, useState } from 'react';
+import React, { useContext, useState } from 'react';
 import { Dimensions, Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import CustomModal from '../components/CustomModal';
@@ -179,29 +179,10 @@ export default function LoginScreen() {
     return Math.abs(hash).toString(16).padStart(16, '0');
   }
 
-  // Obtener nombre de la empresa al iniciar
-  useEffect(() => {
-    const obtenerNombreEmpresa = async () => {
-      try {
-        const response = await ApiService.devuelveNombreEmpresa({
-          secuencial: 1
-        });
-        if (response?.nombreEmpresa) {
-          setNombreEmpresa(response.nombreEmpresa);
-        }
-      } catch (error) {
-        console.error('Error al obtener nombre de empresa:', error);
-        // No mostrar error al usuario, simplemente no se mostrará el nombre
-      }
-    };
-
-    obtenerNombreEmpresa();
-  }, []);
-
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient
-        colors={['#325191', '#1e3a5f']}
+        colors={['#325191', '#38599E']}
         style={styles.gradient}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
@@ -280,7 +261,7 @@ export default function LoginScreen() {
             onPress={() => router.push('/probarimpresion')}
             activeOpacity={0.7}
           >
-            <Text style={styles.versionText} allowFontScaling={false}>Versión 1.1</Text>
+            <Text style={styles.versionText} allowFontScaling={false}>Versión 260318</Text>
           </TouchableOpacity>
         </View>
       </LinearGradient>
@@ -322,7 +303,7 @@ const styles = StyleSheet.create({
     marginBottom: 40,
   },
   logo: {
-    width: 120,
+    width: 360,
     height: 120,
   },
   loginBox: {

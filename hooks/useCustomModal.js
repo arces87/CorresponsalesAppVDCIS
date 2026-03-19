@@ -42,18 +42,14 @@ export function useCustomModal() {
 
   /**
    * Muestra un modal de error
-   * Procesa el mensaje para extraer solo la parte después de los dos puntos si existe
+   * Procesa solo prefijos técnicos tipo "Error 400:" sin recortar mensajes de negocio
    */
   const mostrarError = (title, message) => {
     let processedMessage = message;
     
-    // Si el mensaje contiene dos puntos, extraer solo la parte después del primer ":"
-    if (message && typeof message === 'string' && message.includes(':')) {
-      const partes = message.split(':');
-      if (partes.length > 1) {
-        // Tomar todo después del primer ":" y eliminar espacios al inicio
-        processedMessage = partes.slice(1).join(':').trim();
-      }
+    // Solo eliminar el prefijo si es un error técnico con código HTTP.
+    if (typeof message === 'string' && /^Error\s+\d+:\s*/i.test(message)) {
+      processedMessage = message.replace(/^Error\s+\d+:\s*/i, '').trim();
     }
     
     mostrarModal(title, processedMessage, 'error');

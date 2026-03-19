@@ -370,9 +370,9 @@ class PrintService {
 
   /** Datos estáticos del comprobante (institución, RUC, atención al socio) */
   static COMPROBANTE_DATOS_ESTATICOS = {
-    nombreEmpresa: 'COOPAC LOS ANDES DE COTARUSI',
-    ruc: '20526918429',    
-    atencionAlSocio: '+51945347147',
+    nombreEmpresa: 'COOPERATIVA VIRGEN DEL CISNE',
+    ruc: '00000000000',    
+    atencionAlSocio: '+00000000000',
   };
 
   // Almacenar el dispositivo conectado
@@ -856,7 +856,7 @@ class PrintService {
     comandos.push('\x1B\x61\x01');
     comandos.push(this.centrarTexto((tipo || 'DEPOSITO EN CUENTA').toUpperCase(), width) + '\n');
     comandos.push('\x1D\x21\x11'); // Double size amount
-    comandos.push(this.centrarTexto(`S/ ${parseFloat(monto).toFixed(2)}`, width) + '\n');
+    comandos.push(this.centrarTexto(`$ ${parseFloat(monto).toFixed(2)}`, width) + '\n');
     comandos.push('\x1D\x21\x00');
     comandos.push('\x1B\x61\x00');
     comandos.push('────────────────────────────\n');
@@ -920,7 +920,7 @@ class PrintService {
     contenido += this.centrarTexto('Operación realizada en su Asesor Virtual', width) + '\n\n';
     contenido += '────────────────────────────\n';
     contenido += this.centrarTexto((tipo || 'DEPOSITO EN CUENTA').toUpperCase(), width) + '\n';
-    contenido += this.centrarTexto(`S/ ${parseFloat(monto).toFixed(2)}`, width) + '\n';
+    contenido += this.centrarTexto(`$ ${parseFloat(monto).toFixed(2)}`, width) + '\n';
     contenido += '────────────────────────────\n';
     const fechaHora = this.normalizarFechaHora(fecha);
     contenido += `Fecha y Hora: ${fechaHora}\n`;

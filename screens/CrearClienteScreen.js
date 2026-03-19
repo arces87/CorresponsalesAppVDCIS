@@ -3,7 +3,7 @@ import { Picker } from '@react-native-picker/picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useContext, useEffect, useState } from 'react';
-import { ActivityIndicator, Dimensions, Platform, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Dimensions, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import CustomModal from '../components/CustomModal';
 import { AuthContext } from '../context/AuthContext';
@@ -30,15 +30,12 @@ export default function CrearClienteScreen() {
     const [telefonoDomicilio, setTelefonoDomicilio] = useState('');
     const [direccion, setDireccion] = useState('');
     const [referenciaDomicilio, setReferenciaDomicilio] = useState('');
-    const [pais, setPais] = useState('');
-    const [estadoCivil, setEstadoCivil] = useState('');
-    const [huellaDactilar, setHuellaDactilar] = useState('');
     const [fechaNacimiento, setFechaNacimiento] = useState('');
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [fechaTemporal, setFechaTemporal] = useState('');
-    const [generarPrevisionSocial, setGenerarPrevisionSocial] = useState(true);
     const [camposHabilitados, setCamposHabilitados] = useState(false);
     const [buscandoPersona, setBuscandoPersona] = useState(false);
+    const [personaRegistrada, setPersonaRegistrada] = useState(false);
     
     const onChangeFechaNacimiento = (event, selectedDate) => {
         if (Platform.OS === 'web') {
@@ -102,38 +99,6 @@ export default function CrearClienteScreen() {
         }
     }, [catalogos, loadingCatalogos]);
 
-    // Cargar país
-    useEffect(() => {
-        if (!loadingCatalogos && catalogos?.paises?.length > 0) {
-            const firstPais = catalogos.paises[0].codigo;
-            setPais(prev => {
-                // Solo establecer si no hay un valor ya seleccionado o si el valor actual no existe en las opciones
-                if (!prev || !catalogos.paises.some(p => p.codigo === prev)) {
-                    return firstPais;
-                }
-                return prev;
-            });
-        } else if (!loadingCatalogos && (!catalogos?.paises || catalogos.paises.length === 0)) {
-            setPais('');
-        }
-    }, [catalogos, loadingCatalogos]);
-
-    // Cargar estado civil
-    useEffect(() => {
-        if (!loadingCatalogos && catalogos?.estadoCivil?.length > 0) {
-            const firstEstadoCivil = String(catalogos.estadoCivil[0].codigo);
-            setEstadoCivil(prev => {
-                // Solo establecer si no hay un valor ya seleccionado o si el valor actual no existe en las opciones
-                if (!prev || !catalogos.estadoCivil.some(e => String(e.codigo) === prev)) {
-                    return firstEstadoCivil;
-                }
-                return prev;
-            });
-        } else if (!loadingCatalogos && (!catalogos?.estadoCivil || catalogos.estadoCivil.length === 0)) {
-            setEstadoCivil('');
-        }
-    }, [catalogos, loadingCatalogos]);
-
     const handleBuscarPersona = async () => {
         if (!identificacion?.trim()) {
             mostrarAdvertencia('Campo requerido', 'Ingrese el número de identificación');
@@ -147,13 +112,15 @@ export default function CrearClienteScreen() {
             mostrarAdvertencia('Identificación inválida', 'El número de identificación debe contener solo números');
             return;
         }
+        // Reiniciar estado antes de buscar (evita arrastrar bloqueo de búsquedas anteriores)
+        setPersonaRegistrada(false);
+        setCamposHabilitados(false);
         setBuscandoPersona(true);
         try {
             const data = await ApiService.buscarCliente({
                 identificacion: identificacion.trim(),
                 secuencialTipoIdentificacion: parseInt(tipoIdentificacion, 10),
-                usuario: userData?.usuario,
-                ParaCrearSocio: true
+                usuario: userData?.usuario
             });
             if (data && (data.nombres != null || data.identificacion != null)) {
                 setNombres(data.nombres ?? '');
@@ -167,8 +134,6 @@ export default function CrearClienteScreen() {
                 setTelefonoDomicilio(data.telefonoDomicilio ?? '');
                 setDireccion(data.direccionDomiciliaria ?? data.direccion ?? '');
                 setReferenciaDomicilio(data.referenciaDomiciliaria ?? '');
-                setPais(data.codigoPais ?? data.pais ?? pais);
-                setEstadoCivil(data.codigoEstadoCivil != null ? String(data.codigoEstadoCivil) : estadoCivil);
                 const fechaNacValor = data.fechaNacimientoCreacion ?? data.fechaNacimiento;
                 if (fechaNacValor) {
                     const f = new Date(fechaNacValor);
@@ -177,8 +142,12 @@ export default function CrearClienteScreen() {
                         setFechaTemporal(f.toISOString().split('T')[0]);
                     }
                 }
-                setCamposHabilitados(true);
-                mostrarExito('Persona encontrada', 'Los datos se han cargado. Puede editarlos.');
+                setPersonaRegistrada(true);
+                setCamposHabilitados(false);
+                mostrarAdvertencia(
+                    'Persona ya está registrada en el repositorio',
+                    'No se permite actualizar datos de personas existentes. Solo se pueden crear nuevos socios.'
+                );
             } else {
                 setNombres('');
                 setApellidoPaterno('');
@@ -189,10 +158,9 @@ export default function CrearClienteScreen() {
                 setTelefonoDomicilio('');
                 setDireccion('');
                 setReferenciaDomicilio('');
-                setPais('');
-                setEstadoCivil('');
                 setFechaNacimiento('');
                 setFechaTemporal('');
+                setPersonaRegistrada(false);
                 setCamposHabilitados(true);
                 mostrarAdvertencia('Persona no encontrada', 'Complete los datos del formulario.');
             }
@@ -206,10 +174,9 @@ export default function CrearClienteScreen() {
             setTelefonoDomicilio('');
             setDireccion('');
             setReferenciaDomicilio('');
-            setPais('');
-            setEstadoCivil('');
             setFechaNacimiento('');
             setFechaTemporal('');
+            setPersonaRegistrada(false);
             setCamposHabilitados(true);
             mostrarAdvertencia('Persona no encontrada', 'Complete los datos del formulario.');
         } finally {
@@ -286,20 +253,17 @@ export default function CrearClienteScreen() {
             }
         }
         
-        // Validar país
-        if (!pais) {
-            errors.push('Por favor seleccione un país');
-        }
-        
-        // Validar estado civil
-        if (!estadoCivil) {
-            errors.push('Por favor seleccione un estado civil');
-        }
-        
         return errors;
     };
 
     const handleCrearCliente = async () => {
+        if (personaRegistrada) {
+            mostrarAdvertencia(
+                'Persona ya está registrada en el repositorio',
+                'No se permite actualizar datos de personas existentes. Solo se pueden crear nuevos socios.'
+            );
+            return;
+        }
         const validationErrors = validateForm();
         
         if (validationErrors.length > 0) {
@@ -319,82 +283,24 @@ export default function CrearClienteScreen() {
                 telefonoCelular: telefonoMovil,
                 telefonoDomicilio: telefonoDomicilio || null,
                 referenciaDomiciliaria: referenciaDomicilio.trim() || null,
-                codigoPais: pais || 'EC', // Por defecto Ecuador si no se selecciona
-                codigoEstadoCivil: estadoCivil,
-                codigoDactilar: huellaDactilar || null,
+                codigoPais: 'EC',
+                codigoEstadoCivil: '',
+                codigoDactilar: '',
                 mail: email,
                 direccionDomiciliaria: direccion || '',
                 fechaNacimiento: fechaNacimiento || null,
-                usuario: userData?.usuario,
-                generaPrevisionSocial: generarPrevisionSocial
+                usuario: userData?.usuario
             };
 
-            // Intentar crear el cliente
             const response = await ApiService.crearCliente(clienteData);
 
-            // Verificar si la creación fue exitosa
-            if (!response || !response.secuencialCliente) {
-                throw new Error('No se pudo crear el socio correctamente');
-            }
-
-            // Si no requiere apertura de cuenta, solo mostrar éxito y terminar
-            if (!response.requiereAperturaCuenta) {
-                mostrarExito('Éxito', 'Los datos del socio fueron actualizados');
-                return;
-            }
-
-            // Solo proceder con la apertura de cuenta cuando requiereAperturaCuenta es true
-            try {  
-                const aperturaResponse = await ApiService.aperturaCuenta({
-                    secuencialCuentaSocio: response.secuencialCuenta || null,
-                    secuencialCuentaCorresponsal: 1,
-                    secuencialCliente: response.secuencialCliente,
-                    valorApertura: response.valorParaApertura,
-                    nombreCliente: nombres + ' ' + apellidopaterno + ' ' + apellidomaterno,
-                    identificacionCliente: identificacion,
-                    usuario: userData?.usuario
-                });
-
-                // Verificar si la apertura fue exitosa
-                if (!aperturaResponse || !aperturaResponse.cuentaAperturada) {
-                    throw new Error('No se pudo aperturar la cuenta correctamente');
-                }
-
-                // Navegar a la pantalla de comprobante
-                const fechaActual = new Date().toLocaleString('es-EC', {
-                    year: 'numeric',
-                    month: '2-digit',
-                    day: '2-digit',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit'
-                });
-
-                router.replace({
-                    pathname: '/comprobante',
-                    params: {
-                        monto: response.valorParaApertura.toString(),
-                        comision: '0',
-                        total: response.valorParaApertura.toString(),
-                        referencia: aperturaResponse.documento || 'N/A',
-                        fecha: fechaActual,
-                        identificacionCliente: identificacion || '',
-                        usuario: userData?.usuario || '',
-                        negocio: userData?.nombreMostrar || ''
-                    }
-                });
-            } catch (aperturaError) {
-                console.error('Error al aperturar cuenta:', aperturaError);
-                // Mostrar error pero mantener el cliente creado
-                mostrarError('Error', aperturaError.message || 'El socio se creó correctamente, pero hubo un error al aperturar la cuenta');
-                // Esperar un momento antes de navegar de vuelta
-                setTimeout(() => {
-                    router.back();
-                }, 2000);
+            if (response === true) {
+                mostrarExito('Éxito', 'El socio fue creado correctamente');
+            } else {
+                mostrarError('Error', 'No se pudo crear el socio correctamente');
             }
         } catch (error) {
             console.error('Error al crear cliente:', error);
-            // Si falla la creación del cliente, no se intenta abrir la cuenta
             mostrarError('Error', error.message || 'Ocurrió un error al crear el socio');
         } finally {
             setLoading(false);
@@ -404,7 +310,7 @@ export default function CrearClienteScreen() {
     return (
         <View style={styles.container}>
             <LinearGradient
-                colors={['#2B4F8C', '#1e3a5f']}
+                colors={['#325191', '#38599E']}
                 style={styles.gradient}
                 start={{ x: 0.5, y: 0 }}
                 end={{ x: 0.5, y: 1 }}
@@ -643,80 +549,6 @@ export default function CrearClienteScreen() {
                         </View>                        
 
                         <View style={styles.formGroup}>
-                            <Text style={styles.label}>País *</Text>
-                            <View style={styles.pickerContainer}>
-                                {loadingCatalogos || !catalogos?.paises?.length ? (
-                                    <View style={styles.loadingContainer}>
-                                        <ActivityIndicator size="small" color="#2B4F8C" />
-                                        <Text style={styles.loadingText}>
-                                            {loadingCatalogos ? 'Cargando opciones...' : 'No hay opciones disponibles'}
-                                        </Text>
-                                    </View>
-                                ) : (
-                                    <Picker
-                                        selectedValue={pais}
-                                        onValueChange={(itemValue) => setPais(itemValue)}
-                                        style={styles.picker}
-                                        dropdownIconColor="#2B4F8C"
-                                        enabled={camposHabilitados && !loadingCatalogos && catalogos?.paises?.length > 0}
-                                    >                                    
-                                        {catalogos?.paises?.map((paisItem) => (
-                                            <Picker.Item 
-                                                key={paisItem.codigo} 
-                                                label={paisItem.nombre} 
-                                                value={paisItem.codigo} 
-                                            />
-                                        ))}
-                                    </Picker>
-                                )}
-                            </View>
-                        </View>
-
-                        <View style={styles.formGroup}>
-                            <Text style={styles.label}>Estado Civil *</Text>
-                            <View style={styles.pickerContainer}>
-                                {loadingCatalogos || !catalogos?.estadoCivil?.length ? (
-                                    <View style={styles.loadingContainer}>
-                                        <ActivityIndicator size="small" color="#2B4F8C" />
-                                        <Text style={styles.loadingText}>
-                                            {loadingCatalogos ? 'Cargando opciones...' : 'No hay opciones disponibles'}
-                                        </Text>
-                                    </View>
-                                ) : (
-                                    <Picker
-                                        selectedValue={estadoCivil}
-                                        onValueChange={(itemValue) => setEstadoCivil(itemValue)}
-                                        style={styles.picker}
-                                        dropdownIconColor="#2B4F8C"
-                                        enabled={camposHabilitados && !loadingCatalogos && catalogos?.estadoCivil?.length > 0}
-                                    >                                    
-                                        {catalogos?.estadoCivil?.map((estado) => (
-                                            <Picker.Item 
-                                                key={estado.codigo} 
-                                                label={estado.nombre} 
-                                                value={String(estado.codigo)} 
-                                            />
-                                        ))}
-                                    </Picker>
-                                )}
-                            </View>
-                        </View>
-
-                        {false && (
-                        <View style={styles.formGroup}>
-                            <Text style={styles.label}>Huella Dactilar</Text>
-                            <TextInput
-                                style={styles.input}
-                                value={huellaDactilar}
-                                onChangeText={setHuellaDactilar}
-                                placeholder="Código de huella dactilar"
-                                placeholderTextColor="#999"
-                                maxLength={50}
-                            />
-                        </View>
-                        )}
-
-                        <View style={styles.formGroup}>
                             <Text style={styles.label}>Correo Electrónico *</Text>
                             <TextInput
                                 style={[styles.input, !camposHabilitados && styles.inputDisabled]}
@@ -730,16 +562,6 @@ export default function CrearClienteScreen() {
                             />
                         </View>
 
-                        <View style={styles.checkboxArea}>
-                            <Text style={styles.checkboxLabel}>Generar Previsión Social</Text>
-                            <Switch
-                                value={generarPrevisionSocial}
-                                onValueChange={setGenerarPrevisionSocial}
-                                trackColor={{ false: '#ccc', true: '#2B4F8C' }}
-                                thumbColor="#fff"
-                            />
-                        </View>
-                        
                         <View style={styles.buttonContainer}>
                             <TouchableOpacity
                                 style={[styles.button, styles.cancelButton]}

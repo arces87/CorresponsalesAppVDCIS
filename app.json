@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "CorresponsalesSolidariosApp",
-    "slug": "CorresponsalesSolidariosApp",
+    "name": "CorresponsalesSolidarios",
+    "slug": "CorresponsalesSolidarios",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/icono.png",
     "scheme": "corresponsalessolidariosapp",
     "userInterfaceStyle": "light",
     "newArchEnabled": false,
