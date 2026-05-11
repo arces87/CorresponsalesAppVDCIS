@@ -12,9 +12,14 @@ import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.load
 import com.facebook.react.defaults.DefaultReactNativeHost
 import com.facebook.react.soloader.OpenSourceMergedSoMapping
 import com.facebook.soloader.SoLoader
+import com.facebook.react.modules.network.OkHttpClientFactory
+import com.facebook.react.modules.network.OkHttpClientProvider
 
 import expo.modules.ApplicationLifecycleDispatcher
 import expo.modules.ReactNativeHostWrapper
+
+/** Debe coincidir con el host de [services/ApiService.js] BASE_URL (sin esquema ni puerto). */
+private const val API_BACKEND_HOST = "186.101.59.140"
 
 class MainApplication : Application(), ReactApplication {
 
@@ -42,6 +47,14 @@ class MainApplication : Application(), ReactApplication {
 
   override fun onCreate() {
     super.onCreate()
+    // Certificado TLS autofirmado (CN localhost) accedido por IP: OkHttp verificaría el nombre.
+    // network_security_config confía en el PEM embebido; aquí solo se acepta el hostname de la IP del API.
+    OkHttpClientProvider.setOkHttpClientFactory(
+        OkHttpClientFactory {
+          OkHttpClientProvider.createClientBuilder(this@MainApplication)
+              .hostnameVerifier { hostname, _ -> hostname == API_BACKEND_HOST }
+              .build()
+        })
     try {
       SoLoader.init(this, OpenSourceMergedSoMapping)
       if (BuildConfig.IS_NEW_ARCHITECTURE_ENABLED) {

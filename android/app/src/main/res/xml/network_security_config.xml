@@ -18,4 +18,13 @@
         <domain includeSubdomains="true">127.0.0.1</domain>
         <domain includeSubdomains="true">10.0.2.2</domain>
     </domain-config>
+    <!-- API HTTPS (autofirmado): confiar en el certificado embebido (res/raw).
+         El servidor presenta CN/SAN localhost; las peticiones usan la IP en BASE_URL. -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="false">186.101.59.140</domain>
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="@raw/api_backend_186_101_59_140" />
+        </trust-anchors>
+    </domain-config>
 </network-security-config>

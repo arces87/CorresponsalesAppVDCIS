@@ -4,7 +4,7 @@
     "slug": "CorresponsalesSolidarios",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icono.png",
+    "icon": "./assets/images/icon.png",
     "scheme": "corresponsalessolidariosapp",
     "userInterfaceStyle": "light",
     "newArchEnabled": false,
