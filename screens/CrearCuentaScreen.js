@@ -135,6 +135,14 @@ export default function CrearCuentaScreen() {
       }
     };
 
+  const handleModalClose = () => {
+    const shouldNavigateToMenu = modalData?.type === 'success';
+    cerrarModal();
+    if (shouldNavigateToMenu) {
+      router.replace('/menu');
+    }
+  };
+
   const  handleCrearCuenta = async () => {
     if (!tipoCuenta) {
       mostrarAdvertencia('Campo requerido', 'Por favor seleccione un tipo de cuenta');
@@ -167,10 +175,6 @@ export default function CrearCuentaScreen() {
           'Cuenta creada',
           `Cuenta creada exitosamente\n\nNúmero: ${cuentaCreada.codigoCuenta}\nTipo: ${cuentaCreada.tipoCuentaNombre}`
         );
-        // Esperar un momento antes de navegar para que el usuario vea el mensaje de éxito
-        setTimeout(() => {
-          router.back();
-        }, 2000);
       } else {
         throw new Error('No se pudo crear la cuenta');
       }
@@ -324,7 +328,7 @@ export default function CrearCuentaScreen() {
         message={modalData.message}
         type={modalData.type}
         buttonText={modalData.buttonText}
-        onClose={cerrarModal}
+        onClose={handleModalClose}
       />
     </View>
   );
