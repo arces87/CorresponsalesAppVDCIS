@@ -8,14 +8,17 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import CustomModal from '../components/CustomModal';
 import { AuthContext } from '../context/AuthContext';
 import { useCustomModal } from '../hooks/useCustomModal';
+import { useKeyboardBottomInset } from '../hooks/useKeyboardBottomInset';
 import ApiService from '../services/ApiService';
 import { globalStyles } from '../styles/globalStyles';
 
 export default function DatosTransaccionScreen() {
   const router = useRouter();
-  const { checkSessionExpired, setUserData, catalogos, userData, transaccionData } = useContext(AuthContext);
+  const { setUserData, catalogos, userData, transaccionData } = useContext(AuthContext);
   const insets = useSafeAreaInsets();
+  const keyboardBottomInset = useKeyboardBottomInset();
   const { modalVisible, modalData, mostrarAdvertencia, mostrarError, cerrarModal } = useCustomModal();
+  const keyboardVerticalOffset = Math.max(insets.top, 20) + 56;
   const [tipoId, setTipoId] = useState('');
   const [identificacion, setIdentificacion] = useState('');
   const [cliente, setCliente] = useState(null);
@@ -243,22 +246,6 @@ export default function DatosTransaccionScreen() {
     }
   };
 
-  const handleLogout = async () => {
-    setUserData(null);
-    try {
-      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-      await AsyncStorage.removeItem('authToken');
-    } catch (e) { }
-    router.replace('/');
-  };
-
-  useEffect(() => {
-    if (checkSessionExpired()) {
-      mostrarAdvertencia('Sesión expirada', 'Por seguridad, tu sesión ha finalizado.');
-      handleLogout();
-    }
-  }, []);
-
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient
@@ -286,8 +273,24 @@ export default function DatosTransaccionScreen() {
             </TouchableOpacity>
           </View>
         </View>
-        <KeyboardAvoidingView style={{ flex: 1, width: '100%' }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <ScrollView style={{ flex: 1, width: '100%' }} contentContainerStyle={[styles.scrollViewContent, { paddingBottom: Math.max(20, insets.bottom + 16) }]} keyboardShouldPersistTaps="handled">
+        <KeyboardAvoidingView
+          style={{ flex: 1, width: '100%' }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? keyboardVerticalOffset : 0}
+        >
+          <ScrollView
+            style={{ flex: 1, width: '100%' }}
+            contentContainerStyle={[
+              styles.scrollViewContent,
+              {
+                paddingBottom:
+                  Math.max(20, insets.bottom + 16) + keyboardBottomInset + 40,
+              },
+            ]}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            automaticallyAdjustKeyboardInsets
+          >
             <View style={globalStyles.card}>
               <Text style={styles.instruction}>
                 {'Seleccione los datos de la transacción'}

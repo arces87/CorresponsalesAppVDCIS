@@ -88,15 +88,19 @@ export default function CrearClienteScreen() {
         return /^[0-9]+$/.test(id);
     };
 
-    // Cargar tipos de identificación - siempre usar el primero (DOCUMENTO NACIONAL DE IDENTIDAD)
+    // Tipos de identificación: por defecto el primero del catálogo; conservar la elección si sigue vigente
     useEffect(() => {
-        if (!loadingCatalogos && catalogos?.tiposIdentificaciones?.length > 0) {
-            const firstTipoId = String(catalogos.tiposIdentificaciones[0].secuencial);
-            // Forzar siempre el primer tipo de identificación
-            setTipoIdentificacion(firstTipoId);
-        } else if (!loadingCatalogos && (!catalogos?.tiposIdentificaciones || catalogos.tiposIdentificaciones.length === 0)) {
+        if (loadingCatalogos) return;
+        const tipos = catalogos?.tiposIdentificaciones;
+        if (!tipos?.length) {
             setTipoIdentificacion('');
+            return;
         }
+        const ids = new Set(tipos.map((t) => String(t.secuencial)));
+        setTipoIdentificacion((prev) => {
+            if (prev && ids.has(prev)) return prev;
+            return String(tipos[0].secuencial);
+        });
     }, [catalogos, loadingCatalogos]);
 
     const handleBuscarPersona = async () => {
@@ -358,16 +362,15 @@ export default function CrearClienteScreen() {
                                         selectedValue={tipoIdentificacion}
                                         onValueChange={(itemValue) => itemValue != null && setTipoIdentificacion(itemValue)}
                                         style={styles.picker}
-                                        dropdownIconColor="#2B4F8C"
-                                        enabled={camposHabilitados}
+                                        dropdownIconColor="#2B4F8C"                                        
                                     >
-                                        {catalogos?.tiposIdentificaciones?.length > 0 && (
-                                            <Picker.Item 
-                                                key={catalogos.tiposIdentificaciones[0].secuencial} 
-                                                label={catalogos.tiposIdentificaciones[0].nombre} 
-                                                value={String(catalogos.tiposIdentificaciones[0].secuencial)} 
+                                        {catalogos.tiposIdentificaciones.map((tipo) => (
+                                            <Picker.Item
+                                                key={tipo.secuencial}
+                                                label={tipo.nombre}
+                                                value={String(tipo.secuencial)}
                                             />
-                                        )}
+                                        ))}
                                     </Picker>
                                 )}
                             </View>

@@ -8,6 +8,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import CustomModal from '../components/CustomModal';
 import { AuthContext } from '../context/AuthContext';
 import { useCustomModal } from '../hooks/useCustomModal';
+import { useKeyboardBottomInset } from '../hooks/useKeyboardBottomInset';
 import ApiService from '../services/ApiService';
 import { globalStyles } from '../styles/globalStyles';
 
@@ -15,6 +16,8 @@ export default function HistorialTransaccionesScreen() {
   const router = useRouter();
   const { userData } = useContext(AuthContext);
   const insets = useSafeAreaInsets();
+  const keyboardBottomInset = useKeyboardBottomInset();
+  const keyboardVerticalOffset = Math.max(insets.top, 20) + 56;
   const { modalVisible, modalData, mostrarAdvertencia, mostrarError, cerrarModal } = useCustomModal();
   const [fechaInicio, setFechaInicio] = useState(new Date());
   const [fechaFin, setFechaFin] = useState(new Date());
@@ -124,11 +127,23 @@ export default function HistorialTransaccionesScreen() {
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
       >
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <ScrollView 
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? keyboardVerticalOffset : 0}
+        >
+          <ScrollView
             style={styles.scrollView}
-            contentContainerStyle={[styles.scrollViewContent, { paddingBottom: Math.max(20, insets.bottom + 16) }]}
+            contentContainerStyle={[
+              styles.scrollViewContent,
+              {
+                paddingBottom:
+                  Math.max(20, insets.bottom + 16) + keyboardBottomInset + 40,
+              },
+            ]}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            automaticallyAdjustKeyboardInsets
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}

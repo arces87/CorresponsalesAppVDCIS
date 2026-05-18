@@ -8,10 +8,14 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import CustomModal from '../components/CustomModal';
 import { AuthContext } from '../context/AuthContext';
 import { useCustomModal } from '../hooks/useCustomModal';
+import { useKeyboardBottomInset } from '../hooks/useKeyboardBottomInset';
 import ApiService from '../services/ApiService';
+import { getTokenExpirationMs } from '../services/jwtTokenExp';
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
+  const keyboardBottomInset = useKeyboardBottomInset();
+  const keyboardVerticalOffset = Math.max(insets.top, 20) + 8;
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -89,6 +93,18 @@ export default function LoginScreen() {
         throw new Error('No se recibió un token de autenticación válido');
       }
 
+      const tokenExp = getTokenExpirationMs(response.token);
+      if (tokenExp == null) {
+        try {
+          await AsyncStorage.removeItem('authToken');
+        } catch (e) {
+          // ignore
+        }
+        throw new Error(
+          'No se pudo validar la vigencia del token de acceso. Intente nuevamente o contacte a soporte.'
+        );
+      }
+
       console.log('Login exitoso:', response);    
       console.log('Cambio de contraseña:', response.cambioContrasenia);
 
@@ -104,32 +120,52 @@ export default function LoginScreen() {
       const userData = {
         ...response,
         loginTimestamp: Date.now(),
-        tokenExp: null,
+        tokenExp,
         usuario: (username || '').trim().toUpperCase(),
         contrasenia: password,
         tiempootp: response.tiempoOtp  
       };
 
-        setUserData(userData);      
-        console.log('response', response);  
-        // 3. Obtener catálogos
-        try {
-          const catalogos = await ApiService.obtenerDistribuidos({            
-            usuario: (username || '').trim().toUpperCase()
-          });
+        setUserData(userData);
+        console.log('response', response);
 
-          if (catalogos) {
-            setCatalogos(catalogos);
+        const rollbackPartialLogin = async () => {
+          try {
+            await AsyncStorage.removeItem('authToken');
+          } catch (e) {
+            // ignore
           }
+          setUserData(null);
+          setCatalogos(null);
+        };
+
+        let catalogos;
+        try {
+          catalogos = await ApiService.obtenerDistribuidos({
+            usuario: (username || '').trim().toUpperCase(),
+            suppressSessionExpiredOn401: true,
+          });
         } catch (error) {
           console.error('Error cargando catálogos:', error);
-          // Continuar con el login aunque falle la carga de catálogos
-        setUserData(prev => ({
-          ...prev,
-          catalogos: null
-        }));
+          await rollbackPartialLogin();
+          throw error;
         }
-        console.log('userData', userData);  
+
+        if (
+          !catalogos ||
+          !catalogos.tiposIdentificaciones ||
+          !catalogos.tiposAlertas ||
+          !catalogos.paises ||
+          !catalogos.estadoCivil
+        ) {
+          await rollbackPartialLogin();
+          throw new Error(
+            'No se pudieron cargar los catálogos o la respuesta no es válida. Intente nuevamente.'
+          );
+        }
+
+        setCatalogos(catalogos);
+        console.log('userData', userData);
         router.push('/menu');
     } catch (error) {
       mostrarError('Error de autenticación', error.message || error);
@@ -187,8 +223,22 @@ export default function LoginScreen() {
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
       >
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={20}>
-          <ScrollView contentContainerStyle={[styles.scrollContainer, { paddingBottom: Math.max(24, insets.bottom + 24) }]} keyboardShouldPersistTaps="handled">
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? keyboardVerticalOffset : 0}
+        >
+          <ScrollView
+            contentContainerStyle={[
+              styles.scrollContainer,
+              {
+                paddingBottom: Math.max(24, insets.bottom + 24) + keyboardBottomInset + 32,
+              },
+            ]}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            automaticallyAdjustKeyboardInsets
+          >
             <View style={styles.topSection}>
               <Image
                 source={require('../assets/logo.png')}
@@ -261,7 +311,7 @@ export default function LoginScreen() {
             onPress={() => router.push('/probarimpresion')}
             activeOpacity={0.7}
           >
-            <Text style={styles.versionText} allowFontScaling={false}>Versión 260318</Text>
+            <Text style={styles.versionText} allowFontScaling={false}>Versión 260512</Text>
           </TouchableOpacity>
         </View>
       </LinearGradient>

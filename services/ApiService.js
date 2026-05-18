@@ -2,6 +2,25 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Device from 'expo-device';
 import LocationService from './LocationService';
 import NetworkService from './NetworkService';
+import { triggerSessionExpired } from './SessionExpiredHandler';
+
+/**
+ * Envuelve fetch y notifica cierre de sesión si el backend rechaza el token (401).
+ * No aplica a /Usuario/login (credenciales incorrectas).
+ * @param {{ suppressSessionExpired?: boolean }} [meta] Si es true, no dispara el cierre global (p. ej. catálogos durante el login, donde el caller hace rollback y muestra error).
+ */
+async function apiFetch(url, options, meta = {}) {
+  const response = await fetch(url, options);
+  if (
+    response.status === 401 &&
+    typeof url === 'string' &&
+    !url.includes('/Usuario/login') &&
+    !meta.suppressSessionExpired
+  ) {
+    triggerSessionExpired();
+  }
+  return response;
+}
 
 // Función para generar un GUID tipo hash hexa padded
 function getGUID(mac) {
@@ -15,10 +34,14 @@ function getGUID(mac) {
 }
 
 //LOCAL
-const BASE_URL = 'http://localhost:5001/api/v1.0';
+//const BASE_URL = 'http://localhost:5001/api/v1.0';
 
-// APP
+// APP SIFIZSOFT
 //const BASE_URL = 'http://186.5.29.68:9711/api/v1.0';
+
+// APP COOP (HTTPS autofirmado: cert embebido en android + hostname en MainApplication.kt)
+const BASE_URL = 'https://186.101.59.140:8095/api/v1.0';
+
 // Obtener MAC (AndroidID) de forma segura
 
 let mac = '';
@@ -32,11 +55,11 @@ try {
 // IMEI es un GUID calculado a partir de la MAC
 let imei = getGUID(mac);
 
-mac = 'RP1A.200720.011';
-imei = '000000006CC6CCA5';
+//mac = 'TP1A.220624.014';
+//imei = '000000001458a1ef';
 
 class ApiService {
-  static async obtenerDistribuidos({usuario}) {
+  static async obtenerDistribuidos({ usuario, suppressSessionExpiredOn401 = false }) {
     const url = `${BASE_URL}/Distribuidos/obtenerDistribuidos`;
     try {
       const isConnected = await NetworkService.checkConnection();
@@ -57,14 +80,18 @@ class ApiService {
       console.log('Solicitando catálogos a:', url);
       console.log('Datos enviados:', JSON.stringify(body, null, 2));
       
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': token ? `Bearer ${token}` : '',
+      const response = await apiFetch(
+        url,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': token ? `Bearer ${token}` : '',
+          },
+          body: JSON.stringify(body),
         },
-        body: JSON.stringify(body),
-      });
+        suppressSessionExpiredOn401 ? { suppressSessionExpired: true } : {}
+      );
 
       // Primero obtener el texto de la respuesta
       const responseText = await response.text();
@@ -155,7 +182,7 @@ class ApiService {
       let response;
       try {
         console.log('Iniciando petición fetch...');
-        response = await fetch(url, {
+        response = await apiFetch(url, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -220,7 +247,7 @@ class ApiService {
         latitud: location.latitud,
         longitud: location.longitud,
       };
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -264,7 +291,7 @@ class ApiService {
       const isConnected = await NetworkService.checkConnection();
       if (!isConnected) throw new Error('Sin conexión a internet');
       const token = await this.getAuthToken();      
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -305,7 +332,7 @@ class ApiService {
       const isConnected = await NetworkService.checkConnection();
       if (!isConnected) throw new Error('Sin conexión a internet');
       const token = await this.getAuthToken();
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -360,7 +387,7 @@ class ApiService {
 
       console.log('Buscando cliente con datos:', body);
 
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -438,7 +465,7 @@ class ApiService {
 
       console.log('Buscando cuentas con datos:', body);
 
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -491,7 +518,7 @@ class ApiService {
         contrasenia
       };
       
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -557,7 +584,7 @@ class ApiService {
       console.log('Datos enviados:', JSON.stringify(body, null, 2));
       
       const token = await this.getAuthToken();
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -632,7 +659,7 @@ class ApiService {
       console.log('Datos enviados:', JSON.stringify(body, null, 2));
       
       const token = await this.getAuthToken();
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -691,7 +718,7 @@ class ApiService {
       console.log('Datos enviados:', JSON.stringify(body, null, 2));
       
       const token = await this.getAuthToken();
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -763,7 +790,7 @@ class ApiService {
       console.log('Datos enviados:', JSON.stringify(body, null, 2));
       
       const token = await this.getAuthToken();
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -855,7 +882,7 @@ class ApiService {
       console.log('Datos enviados:', JSON.stringify(body, null, 2));
       
       const token = await this.getAuthToken();
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -937,7 +964,7 @@ class ApiService {
       console.log('Datos enviados:', JSON.stringify(body, null, 2));
       
       const token = await this.getAuthToken();
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1040,7 +1067,7 @@ class ApiService {
         mac,
       };
       
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1109,7 +1136,7 @@ class ApiService {
 
       console.log('body:', body);
 
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1206,7 +1233,7 @@ class ApiService {
       console.log('Solicitando creación de cliente:', url);
       console.log('Datos del cliente:', JSON.stringify(requestData, null, 2));
 
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1276,7 +1303,7 @@ class ApiService {
       console.log('Solicitando historial de transacciones a:', url);
       console.log('Parámetros de búsqueda:', JSON.stringify(body, null, 2));
       
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1326,7 +1353,7 @@ class ApiService {
       console.log('Solicitando tipos de transacciones a:', url);
       console.log('Datos enviados:', JSON.stringify(body, null, 2));
       
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1376,7 +1403,7 @@ class ApiService {
       console.log('Solicitando transacciones de hoja de colecta a:', url);
       console.log('Datos enviados:', JSON.stringify(body, null, 2));
 
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1473,7 +1500,7 @@ class ApiService {
       console.log('Datos enviados:', JSON.stringify(body, null, 2));
       
       const token = await this.getAuthToken();
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1537,7 +1564,7 @@ class ApiService {
       console.log('Datos enviados:', JSON.stringify(body, null, 2));
       
       const token = await this.getAuthToken();
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1607,7 +1634,7 @@ class ApiService {
       console.log('Datos enviados:', JSON.stringify(body, null, 2));
       
       const token = await this.getAuthToken();
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1687,7 +1714,7 @@ class ApiService {
 
       console.log('Solicitando detalle consulta a:', url);
       const token = await this.getAuthToken();
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1768,7 +1795,7 @@ class ApiService {
       console.log('Datos enviados:', JSON.stringify(body, null, 2));
       
       const token = await this.getAuthToken();
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1838,7 +1865,7 @@ class ApiService {
       console.log('Datos enviados:', JSON.stringify(body, null, 2));
       
       const token = await this.getAuthToken();
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

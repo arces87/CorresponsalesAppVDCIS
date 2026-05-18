@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import React, { useContext, useEffect } from 'react';
+import React, { useContext } from 'react';
 import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import CustomModal from '../components/CustomModal';
@@ -22,8 +22,8 @@ const menuItems = [
 
 export default function MenuScreen() {
   const router = useRouter();
-  const { checkSessionExpired, setUserData } = useContext(AuthContext);
-  const { modalVisible, modalData, mostrarAdvertencia, mostrarInfo, cerrarModal } = useCustomModal();
+  const { setUserData } = useContext(AuthContext);
+  const { modalVisible, modalData, mostrarInfo, cerrarModal } = useCustomModal();
 
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
@@ -87,13 +87,6 @@ export default function MenuScreen() {
     } catch (e) {}
     router.replace('/');
   }
-
-  useEffect(() => {
-    if (checkSessionExpired()) {
-      mostrarAdvertencia('Sesión expirada', 'Por seguridad, tu sesión ha finalizado.');
-      handleLogout();
-    }
-  }, []);
 
   const handleMenuItemPress = async (menuItem) => {
     // Guardar la acción seleccionada en AsyncStorage
